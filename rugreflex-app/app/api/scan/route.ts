@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getAsset,
-  getTokenSupply,
 } from "@/lib/helius";
 import {
   getDexScreenerData,
@@ -52,10 +51,9 @@ export async function GET(
      * =====================================================
      */
 
-    const [asset, supply, market] =
+    const [asset, market] =
       await Promise.all([
         getAsset(mint),
-        getTokenSupply(mint),
         getDexScreenerData(mint),
       ]);
 
@@ -160,17 +158,11 @@ export async function GET(
      */
 
     const decimals =
-      supply?.decimals ??
       asset?.token_info?.decimals ??
       0;
 
-    const rawSupply =
-      Number(supply?.amount || 0);
-
     const totalSupply =
-      decimals > 0
-        ? rawSupply / 10 ** decimals
-        : rawSupply;
+      Number(asset?.token_info?.supply || 0);
 
     /*
      * =====================================================
