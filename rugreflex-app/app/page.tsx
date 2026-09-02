@@ -1185,13 +1185,13 @@ export default function Home() {
             )}
 
             {/* =============================================
-                RISK SIGNALS
+                RISK & INTELLIGENCE SIGNALS
                 ============================================= */}
 
             {riskAnalysis && (
               <section className="mb-8">
 
-                <div className="mb-5 flex items-end justify-between">
+                <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
 
                   <div>
 
@@ -1200,978 +1200,263 @@ export default function Home() {
                     </p>
 
                     <h2 className="mt-2 text-2xl font-black">
-                      Detected Risk Signals
+                      Risk &amp; Intelligence Signals
                     </h2>
+
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-white/25">
+                      Observable signals identified during this scan.
+                      Positive observations are shown separately from
+                      potential risk indicators.
+                    </p>
 
                   </div>
 
-                  <span className="text-xs text-white/25">
-                    {riskAnalysis.flags.length} signals
-                  </span>
+                  <div className="flex flex-wrap gap-2">
+
+                    <span className="rounded-full border border-red-400/10 bg-red-500/[0.04] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-red-300/70">
+                      {
+                        riskAnalysis.flags.filter(
+                          (flag) =>
+                            flag.type === "danger" ||
+                            flag.type === "warning"
+                        ).length
+                      } Risk Signals
+                    </span>
+
+                    <span className="rounded-full border border-emerald-400/10 bg-emerald-500/[0.04] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300/70">
+                      {
+                        riskAnalysis.flags.filter(
+                          (flag) =>
+                            flag.type === "positive"
+                        ).length
+                      } Protective Signals
+                    </span>
+
+                  </div>
 
                 </div>
 
-                <div className="grid gap-3">
+                {/* =============================================
+                    ACTUAL RISK SIGNALS
+                    ============================================= */}
 
-                  {riskAnalysis.flags.map(
-                    (flag, index) => {
+                {riskAnalysis.flags.filter(
+                  (flag) =>
+                    flag.type === "danger" ||
+                    flag.type === "warning"
+                ).length > 0 && (
 
-                      const isDanger =
-                        flag.type === "danger";
+                  <div className="mb-5">
 
-                      const isWarning =
-                        flag.type === "warning";
+                    <div className="mb-3 flex items-center justify-between">
 
-                      return (
-                        <div
-                          key={`${flag.title}-${index}`}
-                          className={`rounded-2xl border p-5 ${
-                            isDanger
-                              ? "border-red-400/15 bg-red-500/[0.045]"
-                              : isWarning
-                              ? "border-yellow-400/15 bg-yellow-500/[0.035]"
-                              : "border-emerald-400/15 bg-emerald-500/[0.035]"
-                          }`}
-                        >
+                      <div>
 
-                          <div className="flex items-start gap-4">
+                        <p className="text-sm font-bold">
+                          Risk Signals
+                        </p>
 
+                        <p className="mt-1 text-[10px] text-white/25">
+                          Signals that may increase observed token risk.
+                        </p>
+
+                      </div>
+
+                      <span className="text-[10px] font-bold text-red-300/60">
+                        {
+                          riskAnalysis.flags.filter(
+                            (flag) =>
+                              flag.type === "danger" ||
+                              flag.type === "warning"
+                          ).length
+                        }
+                      </span>
+
+                    </div>
+
+                    <div className="grid gap-3">
+
+                      {riskAnalysis.flags
+                        .filter(
+                          (flag) =>
+                            flag.type === "danger" ||
+                            flag.type === "warning"
+                        )
+                        .map((flag, index) => {
+
+                          const isDanger =
+                            flag.type === "danger";
+
+                          return (
                             <div
-                              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-black ${
+                              key={`risk-${flag.title}-${index}`}
+                              className={`rounded-2xl border p-5 ${
                                 isDanger
-                                  ? "border-red-400/15 bg-red-500/[0.07] text-red-300"
-                                  : isWarning
-                                  ? "border-yellow-400/15 bg-yellow-500/[0.07] text-yellow-300"
-                                  : "border-emerald-400/15 bg-emerald-500/[0.07] text-emerald-300"
+                                  ? "border-red-400/15 bg-red-500/[0.045]"
+                                  : "border-yellow-400/15 bg-yellow-500/[0.035]"
                               }`}
                             >
-                              {isDanger ||
-                              isWarning
-                                ? "!"
-                                : "✓"}
+
+                              <div className="flex items-start gap-4">
+
+                                <div
+                                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-black ${
+                                    isDanger
+                                      ? "border-red-400/15 bg-red-500/[0.07] text-red-300"
+                                      : "border-yellow-400/15 bg-yellow-500/[0.07] text-yellow-300"
+                                  }`}
+                                >
+                                  !
+                                </div>
+
+                                <div className="min-w-0">
+
+                                  <p
+                                    className={`text-sm font-bold ${
+                                      isDanger
+                                        ? "text-red-200"
+                                        : "text-yellow-200"
+                                    }`}
+                                  >
+                                    {flag.title}
+                                  </p>
+
+                                  <p className="mt-1 text-xs leading-5 text-white/35">
+                                    {flag.description}
+                                  </p>
+
+                                </div>
+
+                              </div>
+
                             </div>
+                          );
 
-                            <div className="min-w-0">
+                        })}
 
-                              <p className="text-sm font-bold">
-                                {flag.title}
-                              </p>
+                    </div>
 
-                              <p className="mt-1 text-xs leading-5 text-white/35">
-                                {flag.description}
-                              </p>
+                  </div>
+
+                )}
+
+                {/* =============================================
+                    NO RISK SIGNALS
+                    ============================================= */}
+
+                {riskAnalysis.flags.filter(
+                  (flag) =>
+                    flag.type === "danger" ||
+                    flag.type === "warning"
+                ).length === 0 && (
+
+                  <div className="mb-5 rounded-2xl border border-emerald-400/10 bg-emerald-500/[0.025] p-5">
+
+                    <div className="flex items-start gap-4">
+
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-400/15 bg-emerald-500/[0.06] text-sm font-black text-emerald-300">
+                        ✓
+                      </div>
+
+                      <div>
+
+                        <p className="text-sm font-bold text-emerald-200">
+                          No Significant Risk Signals Detected
+                        </p>
+
+                        <p className="mt-1 text-xs leading-5 text-white/35">
+                          The current MVP checks did not identify any
+                          danger or warning signals that added risk points
+                          to this token&apos;s observed risk score.
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                )}
+
+                {/* =============================================
+                    PROTECTIVE SIGNALS
+                    ============================================= */}
+
+                {riskAnalysis.flags.filter(
+                  (flag) =>
+                    flag.type === "positive"
+                ).length > 0 && (
+
+                  <div>
+
+                    <div className="mb-3 flex items-center justify-between">
+
+                      <div>
+
+                        <p className="text-sm font-bold">
+                          Protective Signals
+                        </p>
+
+                        <p className="mt-1 text-[10px] text-white/25">
+                          Positive observations identified during this scan.
+                        </p>
+
+                      </div>
+
+                      <span className="text-[10px] font-bold text-emerald-300/60">
+                        {
+                          riskAnalysis.flags.filter(
+                            (flag) =>
+                              flag.type === "positive"
+                          ).length
+                        }
+                      </span>
+
+                    </div>
+
+                    <div className="grid gap-3">
+
+                      {riskAnalysis.flags
+                        .filter(
+                          (flag) =>
+                            flag.type === "positive"
+                        )
+                        .map((flag, index) => (
+
+                          <div
+                            key={`protective-${flag.title}-${index}`}
+                            className="rounded-2xl border border-emerald-400/10 bg-emerald-500/[0.025] p-5"
+                          >
+
+                            <div className="flex items-start gap-4">
+
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-400/15 bg-emerald-500/[0.06] text-sm font-black text-emerald-300">
+                                ✓
+                              </div>
+
+                              <div className="min-w-0">
+
+                                <p className="text-sm font-bold">
+                                  {flag.title}
+                                </p>
+
+                                <p className="mt-1 text-xs leading-5 text-white/35">
+                                  {flag.description}
+                                </p>
+
+                              </div>
 
                             </div>
 
                           </div>
 
-                        </div>
-                      );
-                    }
-                  )}
-
-                </div>
-
-              </section>
-            )}
-
-            {/* =============================================
-                SECURITY
-                ============================================= */}
-
-            {securityData && (
-              <section className="mb-8">
-
-                <div className="mb-5">
-
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30">
-                    Token Security
-                  </p>
-
-                  <h2 className="mt-2 text-2xl font-black">
-                    Authority Controls
-                  </h2>
-
-                </div>
-
-                <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#1b050b]/85">
-
-                  <div className="flex flex-col gap-3 border-b border-white/[0.07] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-
-                    <div>
-
-                      <p className="text-sm font-bold">
-                        Security status
-                      </p>
-
-                      <p className="mt-1 text-xs text-white/25">
-                        Mint and freeze authority controls detected during this scan.
-                      </p>
-
-                    </div>
-
-                    <span
-                      className={`w-fit rounded-full border px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider ${
-                        hasSecurityWarning
-                          ? "border-red-400/15 bg-red-500/[0.06] text-red-300"
-                          : "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
-                      }`}
-                    >
-                      {hasSecurityWarning
-                        ? "Security Warning"
-                        : "Authorities Revoked"}
-                    </span>
-
-                  </div>
-
-                  <div className="grid gap-4 p-6 lg:grid-cols-2 lg:p-8">
-
-                    {/* MINT */}
-
-                    <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-6">
-
-                      <div className="flex items-start justify-between gap-4">
-
-                        <div>
-
-                          <p className="text-sm font-bold">
-                            Mint Authority
-                          </p>
-
-                          <p className="mt-2 text-xs leading-5 text-white/30">
-                            Controls whether additional
-                            tokens can be minted.
-                          </p>
-
-                        </div>
-
-                        <span
-                          className={`rounded-full border px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider ${
-                            securityData.mintAuthorityActive
-                              ? "border-red-400/15 bg-red-500/[0.07] text-red-300"
-                              : "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
-                          }`}
-                        >
-                          {securityData.mintAuthorityActive
-                            ? "ACTIVE"
-                            : "REVOKED"}
-                        </span>
-
-                      </div>
-
-                      <div className="mt-5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
-
-                        <p className="text-[9px] uppercase tracking-wider text-white/20">
-                          Authority address
-                        </p>
-
-                        <p className="mt-2 break-all font-mono text-xs text-white/40">
-                          {securityData.mintAuthority ||
-                            "None — authority revoked"}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    {/* FREEZE */}
-
-                    <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-6">
-
-                      <div className="flex items-start justify-between gap-4">
-
-                        <div>
-
-                          <p className="text-sm font-bold">
-                            Freeze Authority
-                          </p>
-
-                          <p className="mt-2 text-xs leading-5 text-white/30">
-                            Controls whether token accounts
-                            can be frozen.
-                          </p>
-
-                        </div>
-
-                        <span
-                          className={`rounded-full border px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider ${
-                            securityData.freezeAuthorityActive
-                              ? "border-red-400/15 bg-red-500/[0.07] text-red-300"
-                              : "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
-                          }`}
-                        >
-                          {securityData.freezeAuthorityActive
-                            ? "ACTIVE"
-                            : "REVOKED"}
-                        </span>
-
-                      </div>
-
-                      <div className="mt-5 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
-
-                        <p className="text-[9px] uppercase tracking-wider text-white/20">
-                          Authority address
-                        </p>
-
-                        <p className="mt-2 break-all font-mono text-xs text-white/40">
-                          {securityData.freezeAuthority ||
-                            "None — authority revoked"}
-                        </p>
-
-                      </div>
+                        ))}
 
                     </div>
 
                   </div>
 
-                  <div className="border-t border-white/[0.07] px-6 py-5">
-
-                    <p className="text-xs text-white/35">
-
-                      {hasSecurityWarning
-                        ? "One or more token authorities remain active and should be reviewed."
-                        : "No active mint or freeze authority was detected during this scan."}
-
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </section>
-            )}
-
-            {/* =============================================
-                MARKET INTELLIGENCE
-                ============================================= */}
-
-            {liquidityData && (
-              <section className="mb-8">
-
-                <div className="mb-5">
-
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30">
-                    Market Intelligence
-                  </p>
-
-                  <h2 className="mt-2 text-2xl font-black">
-                    Liquidity Analysis
-                  </h2>
-
-                </div>
-
-                <div className="overflow-hidden rounded-3xl border border-white/[0.08] bg-[#1b050b]/85">
-
-                  <div className="flex flex-col gap-3 border-b border-white/[0.07] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-
-                    <div>
-
-                      <p className="text-sm font-bold">
-                        Liquidity
-                      </p>
-
-                      <p className="mt-1 text-xs text-white/25">
-                        Largest detected Solana trading pool.
-                      </p>
-
-                    </div>
-
-                    <span
-                      className={`w-fit rounded-full border px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider ${
-                        liquidityData.status ===
-                        "AVAILABLE"
-                          ? "border-emerald-400/15 bg-emerald-400/[0.05] text-emerald-300"
-                          : "border-yellow-400/15 bg-yellow-400/[0.05] text-yellow-300"
-                      }`}
-                    >
-                      {liquidityData.status ===
-                      "AVAILABLE"
-                        ? "Liquidity Found"
-                        : "Liquidity Unknown"}
-                    </span>
-
-                  </div>
-
-                  <div className="p-6 lg:p-8">
-
-                    <div
-                      className={`rounded-2xl border p-5 ${
-                        liquidityData.status ===
-                        "AVAILABLE"
-                          ? "border-yellow-400/15 bg-yellow-400/[0.035]"
-                          : "border-red-400/15 bg-red-500/[0.04]"
-                      }`}
-                    >
-
-                      <div className="flex items-start gap-4">
-
-                        <div
-                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg font-black ${
-                            liquidityData.status ===
-                            "AVAILABLE"
-                              ? "bg-yellow-400/[0.08] text-yellow-300"
-                              : "bg-red-500/[0.08] text-red-300"
-                          }`}
-                        >
-                          {liquidityData.status ===
-                          "AVAILABLE"
-                            ? "!"
-                            : "?"}
-                        </div>
-
-                        <div>
-
-                          <p className="text-sm font-bold">
-                            {liquidityData.assessment}
-                          </p>
-
-                          <p className="mt-2 text-xs leading-5 text-white/35">
-                            {liquidityData.note}
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                    {/* METRICS */}
-
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          Liquidity
-                        </p>
-
-                        <p className="mt-2 text-xl font-black">
-                          {formatUsd(
-                            liquidityData.liquidityUsd
-                          )}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          24h Volume
-                        </p>
-
-                        <p className="mt-2 text-xl font-black">
-                          {formatUsd(
-                            liquidityData.volume24h
-                          )}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          DEX
-                        </p>
-
-                        <p className="mt-2 truncate text-xl font-black">
-                          {liquidityData.dex ||
-                            "Unknown"}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          Pairs
-                        </p>
-
-                        <p className="mt-2 text-xl font-black">
-                          {liquidityData.pairCount ??
-                            0}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    {/* SECONDARY MARKET DATA */}
-
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          Pool Price
-                        </p>
-
-                        <p className="mt-2 text-lg font-black">
-                          {formatUsd(
-                            liquidityData.priceUsd
-                          )}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          Market Cap
-                        </p>
-
-                        <p className="mt-2 text-lg font-black">
-                          {formatUsd(
-                            liquidityData.marketCap
-                          )}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          FDV
-                        </p>
-
-                        <p className="mt-2 text-lg font-black">
-                          {formatUsd(
-                            liquidityData.fdv
-                          )}
-                        </p>
-
-                      </div>
-
-                      <div className="rounded-2xl border border-white/[0.07] bg-[#110308]/80 p-5">
-
-                        <p className="text-[10px] uppercase tracking-wider text-white/25">
-                          Pair Address
-                        </p>
-
-                        <p className="mt-2 truncate font-mono text-xs text-white/35">
-                          {shortenAddress(
-                            liquidityData.pairAddress,
-                            8,
-                            8
-                          )}
-                        </p>
-
-                      </div>
-
-                    </div>
-
-                    {liquidityData.pairUrl && (
-                      <div className="mt-5">
-
-                        <a
-                          href={
-                            liquidityData.pairUrl
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center rounded-xl border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-xs font-semibold text-white/60 transition hover:bg-white/[0.07] hover:text-white"
-                        >
-                          View Trading Pair →
-                        </a>
-
-                      </div>
-                    )}
-
-                    <p className="mt-5 text-[10px] leading-5 text-white/20">
-                      Liquidity is one component of token
-                      risk. Strong liquidity does not eliminate
-                      other security, concentration or market
-                      risks.
-                    </p>
-
-                  </div>
-
-                </div>
-
-              </section>
-            )}
-
-            {/* =============================================
-                TOKEN INFORMATION
-                ============================================= */}
-
-            <section className="mb-8">
-
-              <div className="mb-5">
-
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30">
-                  Token
-                </p>
-
-                <h2 className="mt-2 text-2xl font-black">
-                  Token Information
-                </h2>
-
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-                <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                  <p className="text-[10px] uppercase tracking-wider text-white/25">
-                    Token Name
-                  </p>
-
-                  <p className="mt-3 truncate text-lg font-black">
-                    {tokenName}
-                  </p>
-
-                </div>
-
-                <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                  <p className="text-[10px] uppercase tracking-wider text-white/25">
-                    Symbol
-                  </p>
-
-                  <p className="mt-3 text-lg font-black">
-                    ${tokenSymbol}
-                  </p>
-
-                </div>
-
-                <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                  <p className="text-[10px] uppercase tracking-wider text-white/25">
-                    Total Supply
-                  </p>
-
-                  <p className="mt-3 text-lg font-black">
-                    {token.token_info?.supply
-                      ?.toLocaleString() ||
-                      "Unknown"}
-                  </p>
-
-                </div>
-
-                <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                  <p className="text-[10px] uppercase tracking-wider text-white/25">
-                    Decimals
-                  </p>
-
-                  <p className="mt-3 text-lg font-black">
-                    {token.token_info?.decimals ??
-                      "Unknown"}
-                  </p>
-
-                </div>
-
-              </div>
-
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-
-                <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                  <p className="text-[10px] uppercase tracking-wider text-white/25">
-                    Current Token Price
-                  </p>
-
-                  <p className="mt-2 text-2xl font-black">
-
-                    {price !== undefined
-                      ? price.toLocaleString(
-                          undefined,
-                          {
-                            maximumFractionDigits:
-                              8,
-                          }
-                        )
-                      : "Unknown"}
-
-                    <span className="ml-2 text-xs font-medium text-white/25">
-                      {currency}
-                    </span>
-
-                  </p>
-
-                </div>
-
-                <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                  <p className="text-[10px] uppercase tracking-wider text-white/25">
-                    Fully Diluted Valuation
-                  </p>
-
-                  <p className="mt-2 text-2xl font-black">
-                    {formatUsd(fdv)}
-                  </p>
-
-                </div>
-
-              </div>
-
-            </section>
-
-            {/* =============================================
-                HOLDER ANALYSIS
-                ============================================= */}
-
-            {holderData && (
-              <section className="mb-8">
-
-                <div className="mb-5">
-
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30">
-                    Distribution
-                  </p>
-
-                  <h2 className="mt-2 text-2xl font-black">
-                    Holder Analysis
-                  </h2>
-
-                  <p className="mt-1 text-xs text-white/25">
-                    Wallet concentration snapshot.
-                  </p>
-
-                </div>
-
-                {/* SUMMARY */}
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                    <p className="text-[10px] uppercase tracking-wider text-white/25">
-                      Accounts Scanned
-                    </p>
-
-                    <p className="mt-2 text-2xl font-black">
-                      {holderData.totalAccounts.toLocaleString()}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                    <p className="text-[10px] uppercase tracking-wider text-white/25">
-                      Holders Found
-                    </p>
-
-                    <p className="mt-2 text-2xl font-black">
-                      {holderData.totalHolders.toLocaleString()}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                    <p className="text-[10px] uppercase tracking-wider text-white/25">
-                      Top Holder
-                    </p>
-
-                    <p className="mt-2 text-2xl font-black">
-                      {holderData.topHolderPercentage}%
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-5">
-
-                    <p className="text-[10px] uppercase tracking-wider text-white/25">
-                      Top 10 Holders
-                    </p>
-
-                    <p className="mt-2 text-2xl font-black">
-                      {holderData.top10Percentage}%
-                    </p>
-
-                  </div>
-
-                </div>
-
-                {/* CONCENTRATION */}
-
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-6">
-
-                    <div className="flex items-center justify-between">
-
-                      <p className="text-sm font-bold">
-                        Largest Holder
-                      </p>
-
-                      <span className="text-xl font-black">
-                        {holderData.topHolderPercentage}%
-                      </span>
-
-                    </div>
-
-                    <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.05]">
-
-                      <div
-                        className="h-full rounded-full bg-white"
-                        style={{
-                          width: `${Math.min(
-                            holderData.topHolderPercentage,
-                            100
-                          )}%`,
-                        }}
-                      />
-
-                    </div>
-
-                    <p className="mt-3 text-[11px] leading-5 text-white/25">
-                      Supply controlled by the largest
-                      detected wallet.
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-[#1b050b]/75 p-6">
-
-                    <div className="flex items-center justify-between">
-
-                      <p className="text-sm font-bold">
-                        Top 10 Concentration
-                      </p>
-
-                      <span className="text-xl font-black">
-                        {holderData.top10Percentage}%
-                      </span>
-
-                    </div>
-
-                    <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.05]">
-
-                      <div
-                        className="h-full rounded-full bg-white"
-                        style={{
-                          width: `${Math.min(
-                            holderData.top10Percentage,
-                            100
-                          )}%`,
-                        }}
-                      />
-
-                    </div>
-
-                    <p className="mt-3 text-[11px] leading-5 text-white/25">
-                      Combined supply controlled by the
-                      ten largest detected wallets.
-                    </p>
-
-                  </div>
-
-                </div>
-
-                {/* MORE DISTRIBUTION DATA */}
-
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-white/20">
-                      Top 5
-                    </p>
-
-                    <p className="mt-2 text-lg font-black">
-                      {holderData.top5Percentage ??
-                        "N/A"}
-                      {holderData.top5Percentage !==
-                        undefined && "%"}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-white/20">
-                      Top 10
-                    </p>
-
-                    <p className="mt-2 text-lg font-black">
-                      {holderData.top10Percentage}%
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-white/20">
-                      Top 20
-                    </p>
-
-                    <p className="mt-2 text-lg font-black">
-                      {holderData.top20Percentage ??
-                        "N/A"}
-                      {holderData.top20Percentage !==
-                        undefined && "%"}
-                    </p>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
-
-                    <p className="text-[9px] uppercase tracking-wider text-white/20">
-                      Top 50
-                    </p>
-
-                    <p className="mt-2 text-lg font-black">
-                      {holderData.top50Percentage ??
-                        "N/A"}
-                      {holderData.top50Percentage !==
-                        undefined && "%"}
-                    </p>
-
-                  </div>
-
-                </div>
-
-                {/* TOP HOLDERS */}
-
-                <div className="mt-8 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/75">
-
-                  <div className="flex flex-col gap-2 border-b border-white/[0.07] px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
-
-                    <div>
-
-                      <h3 className="font-bold">
-                        Top Holders
-                      </h3>
-
-                      <p className="mt-1 text-[11px] text-white/25">
-                        Largest wallets detected during this scan.
-                      </p>
-
-                    </div>
-
-                    <span className="text-[10px] text-white/25">
-                      Showing top 20
-                    </span>
-
-                  </div>
-
-                  <div className="overflow-x-auto">
-
-                    <table className="w-full min-w-[650px] text-left">
-
-                      <thead className="border-b border-white/[0.07]">
-
-                        <tr className="text-[9px] uppercase tracking-wider text-white/25">
-
-                          <th className="px-5 py-4">
-                            Rank
-                          </th>
-
-                          <th className="px-5 py-4">
-                            Wallet
-                          </th>
-
-                          <th className="px-5 py-4 text-right">
-                            Amount
-                          </th>
-
-                          <th className="px-5 py-4 text-right">
-                            Ownership
-                          </th>
-
-                        </tr>
-
-                      </thead>
-
-                      <tbody>
-
-                        {holderData.holders
-                          .slice(0, 20)
-                          .map(
-                            (
-                              holder,
-                              index
-                            ) => (
-
-                              <tr
-                                key={
-                                  holder.owner
-                                }
-                                className="border-b border-white/[0.04] transition hover:bg-white/[0.025]"
-                              >
-
-                                <td className="px-5 py-4">
-
-                                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.04] text-[10px] font-bold text-white/45">
-                                    {index + 1}
-                                  </span>
-
-                                </td>
-
-                                <td className="px-5 py-4">
-
-                                  <span className="font-mono text-[10px] text-white/40">
-
-                                    {shortenAddress(
-                                      holder.owner,
-                                      10,
-                                      8
-                                    )}
-
-                                  </span>
-
-                                </td>
-
-                                <td className="px-5 py-4 text-right font-mono text-[10px] text-white/50">
-
-                                  {formatNumber(
-                                    holder.amount
-                                  )}
-
-                                </td>
-
-                                <td className="px-5 py-4 text-right">
-
-                                  {holder.percentage !==
-                                  null ? (
-
-                                    <div className="flex items-center justify-end gap-3">
-
-                                      <div className="hidden h-1 w-16 overflow-hidden rounded-full bg-white/[0.05] sm:block">
-
-                                        <div
-                                          className="h-full rounded-full bg-white"
-                                          style={{
-                                            width: `${Math.min(
-                                              holder.percentage,
-                                              100
-                                            )}%`,
-                                          }}
-                                        />
-
-                                      </div>
-
-                                      <span className="font-mono text-[10px] text-white/50">
-                                        {
-                                          holder.percentage
-                                        }
-                                        %
-                                      </span>
-
-                                    </div>
-
-                                  ) : (
-                                    <span className="text-[10px] text-white/20">
-                                      N/A
-                                    </span>
-                                  )}
-
-                                </td>
-
-                              </tr>
-
-                            )
-                          )}
-
-                      </tbody>
-
-                    </table>
-
-                  </div>
-
-                </div>
+                )}
 
               </section>
             )}
@@ -2402,11 +1687,11 @@ export default function Home() {
 
                 <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6">
 
-                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/25">
-                    Planned
+                  <span className="absolute right-5 top-5 rounded-full border border-emerald-400/10 bg-emerald-500/[0.04] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-emerald-300/70">
+                    Active
                   </span>
 
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-sm">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/10 bg-emerald-500/[0.04] text-sm text-emerald-300">
                     D
                   </div>
 
@@ -2415,8 +1700,10 @@ export default function Home() {
                   </h3>
 
                   <p className="mt-2 text-xs leading-5 text-white/25">
-                    Analyze deployer wallets, funding paths,
-                    wallet history and related token activity.
+                    Analyze the associated deployer wallet,
+                    current balance and recent blockchain activity.
+                    Advanced funding-path and relationship analysis
+                    will be expanded in future releases.
                   </p>
 
                 </div>
