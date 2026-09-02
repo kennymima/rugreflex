@@ -13,7 +13,7 @@ export type ScanUsageResult = {
   remaining: number;
 };
 
-const ANONYMOUS_LIMIT = 3;
+const ANONYMOUS_LIMIT = 30;
 const REGISTERED_LIMIT = 5;
 const PRO_LIMIT = 50;
 
