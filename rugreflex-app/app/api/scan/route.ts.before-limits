@@ -6,13 +6,6 @@ import {
 import {
   getDexScreenerData,
 } from "@/lib/dexscreener";
-import {
-  checkAndConsumeScan,
-} from "@/lib/scan/usage";
-import {
-  VISITOR_COOKIE_NAME,
-  createVisitorId,
-} from "@/lib/visitor/id";
 
 export async function GET(
   request: NextRequest
@@ -30,21 +23,6 @@ export async function GET(
         { status: 400 }
       );
     }
-
-    /*
-     * =====================================================
-     * VISITOR IDENTIFICATION
-     * =====================================================
-     */
-
-    const existingVisitorId =
-      request.cookies.get(
-        VISITOR_COOKIE_NAME
-      )?.value ?? null;
-
-    const visitorId =
-      existingVisitorId ??
-      createVisitorId();
 
     /*
      * =====================================================
@@ -68,61 +46,6 @@ export async function GET(
         },
         { status: 404 }
       );
-    }
-
-    /*
-     * =====================================================
-     * CHECK DAILY SCAN ALLOWANCE
-     * =====================================================
-     */
-
-    const usage =
-      await checkAndConsumeScan(
-        visitorId
-      );
-
-    if (!usage.allowed) {
-      const response =
-        NextResponse.json(
-          {
-            success: false,
-            error:
-              usage.userType === "anonymous"
-                ? "You have reached your 3 free scans for today."
-                : "You have reached your daily scan limit.",
-            scanLimit: {
-              userType:
-                usage.userType,
-              limit:
-                usage.limit,
-              used:
-                usage.used,
-              remaining:
-                usage.remaining,
-            },
-            upgradeRequired:
-              usage.userType !== "pro",
-          },
-          { status: 429 }
-        );
-
-      if (!existingVisitorId) {
-        response.cookies.set(
-          VISITOR_COOKIE_NAME,
-          visitorId,
-          {
-            httpOnly: true,
-            secure:
-              process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge:
-              60 * 60 * 24 * 365,
-            path: "/",
-          }
-        );
-      }
-
-      return response;
     }
 
     /*
@@ -277,22 +200,10 @@ export async function GET(
      * =====================================================
      */
 
-    const response =
-      NextResponse.json({
-        success: true,
+    return NextResponse.json({
+      success: true,
 
-        scanLimit: {
-          userType:
-            usage.userType,
-          limit:
-            usage.limit,
-          used:
-            usage.used,
-          remaining:
-            usage.remaining,
-        },
-
-        scan: {
+      scan: {
         mint,
 
         token: {
@@ -309,34 +220,10 @@ export async function GET(
 
         security,
 
-          timestamp:
-            new Date().toISOString(),
-        },
-      });
-
-    /*
-     * =====================================================
-     * SAVE ANONYMOUS VISITOR COOKIE
-     * =====================================================
-     */
-
-    if (!existingVisitorId) {
-      response.cookies.set(
-        VISITOR_COOKIE_NAME,
-        visitorId,
-        {
-          httpOnly: true,
-          secure:
-            process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          maxAge:
-            60 * 60 * 24 * 365,
-          path: "/",
-        }
-      );
-    }
-
-    return response;
+        timestamp:
+          new Date().toISOString(),
+      },
+    });
   } catch (error) {
     console.error(
       "RugReflex unified scan error:",

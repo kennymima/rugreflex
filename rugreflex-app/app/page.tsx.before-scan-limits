@@ -104,13 +104,6 @@ type RiskLevel = {
   description: string;
 };
 
-type ScanLimit = {
-  allowed: boolean;
-  remaining: number;
-  limit: number;
-  resetAt?: string | null;
-};
-
 /* =========================================================
    HELPERS
    ========================================================= */
@@ -194,8 +187,6 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
-  const [scanLimit, setScanLimit] =
-    useState<ScanLimit | null>(null);
 
   /* =======================================================
      SCAN TOKEN
@@ -248,10 +239,6 @@ export default function Home() {
           scanResult.error ||
             "Unable to scan this token."
         );
-      }
-
-      if (scanResult.scanLimit) {
-        setScanLimit(scanResult.scanLimit);
       }
 
       const scan = scanResult.scan;
@@ -674,28 +661,6 @@ export default function Home() {
                 </div>
 
               </div>
-
-              {scanLimit && (
-                <div className="mb-3 flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3">
-                  <div>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/25">
-                      Free Scan Credits
-                    </p>
-                    <p className="mt-1 text-xs text-white/40">
-                      {scanLimit.remaining} of {scanLimit.limit} scans remaining
-                    </p>
-                  </div>
-
-                  <div className="text-right">
-                    <p className="text-lg font-black text-white/70">
-                      {scanLimit.remaining}
-                    </p>
-                    <p className="text-[8px] uppercase tracking-wider text-white/20">
-                      Remaining
-                    </p>
-                  </div>
-                </div>
-              )}
 
               <div className="flex flex-col gap-3 sm:flex-row">
 
