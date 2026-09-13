@@ -41,6 +41,10 @@ export default function RugReflexNav() {
         </Link>
 
         <div className="hidden items-center gap-1 lg:flex">
+          <Link href="/" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
+            Home
+          </Link>
+
           <Link href="/scan" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
             Scanner
           </Link>
@@ -55,15 +59,9 @@ export default function RugReflexNav() {
             </button>
           )}
 
-          {authenticated ? (
-            <Link href="/chat" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
-              AI Chat
-            </Link>
-          ) : (
-            <button type="button" onClick={() => openGate("AI Chat")} className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
-              AI Chat
-            </button>
-          )}
+          <Link href="/wallet" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
+            Wallet Intelligence
+          </Link>
 
           <Link href="/history" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
             History
@@ -72,6 +70,16 @@ export default function RugReflexNav() {
           <Link href="/referrals" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
             Referrals
           </Link>
+
+          {authenticated ? (
+            <Link href="/chat" className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
+              RugReflex Assist
+            </Link>
+          ) : (
+            <button type="button" onClick={() => openGate("RugReflex Assist")} className="rounded-lg px-3 py-2 text-xs font-semibold text-white/55 transition hover:bg-white/[0.05] hover:text-white">
+              RugReflex Assist
+            </button>
+          )}
 
           <Link href="/pro" className="rounded-lg px-3 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/[0.08] hover:text-red-200">
             Pro

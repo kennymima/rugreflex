@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import RugReflexNav from "@/app/components/RugReflexNav";
 
 type FundingSource = {
   address: string;
@@ -136,7 +137,10 @@ export default function WalletIntelligencePage() {
       ?.replaceAll("_", " ") || "—";
 
   return (
-    <main className="min-h-screen bg-[#070405] px-4 py-10 text-white">
+    <>
+      <RugReflexNav />
+
+      <main className="min-h-screen bg-[#070405] px-4 py-10 text-white">
       <div className="mx-auto max-w-6xl">
 
         <div className="mb-8">
@@ -536,6 +540,7 @@ export default function WalletIntelligencePage() {
         </p>
 
       </div>
-    </main>
+      </main>
+    </>
   );
 }
