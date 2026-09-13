@@ -1,4 +1,5 @@
 "use client";
+import RugReflexNav from "@/app/components/RugReflexNav";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -124,36 +125,13 @@ export default function ReferralsPage() {
       : "";
 
   return (
-    <main className="min-h-screen bg-[#100308] text-white">
+    <>
+    <RugReflexNav />
+
+      <main className="min-h-screen bg-[#100308] text-white">
       <div className="mx-auto max-w-5xl px-5 py-10 sm:px-6">
 
-        <nav className="mb-12 flex items-center justify-between border-b border-white/[0.07] pb-5">
-          <Link
-            href="/"
-            className="flex items-center gap-3"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white font-black text-[#64122b]">
-              R
-            </div>
-
-            <div>
-              <p className="text-sm font-black tracking-[0.08em]">
-                RUGREFLEX
-              </p>
-
-              <p className="text-[9px] uppercase tracking-[0.22em] text-white/35">
-                Token Risk Intelligence
-              </p>
-            </div>
-          </Link>
-
-          <Link
-            href="/"
-            className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-white/60 transition hover:border-[#9f2348]/50 hover:text-white"
-          >
-            Scanner
-          </Link>
-        </nav>
+        
 
         <section className="rounded-[28px] border border-white/[0.08] bg-[#250711]/80 p-8 sm:p-12">
 
@@ -388,5 +366,6 @@ export default function ReferralsPage() {
         </section>
       </div>
     </main>
+    </>
   );
 }

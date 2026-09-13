@@ -1,0 +1,108 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import RugReflexNav from "@/app/components/RugReflexNav";
+
+type RadarToken = {
+  tokenAddress: string;
+  name: string;
+  symbol: string;
+  icon?: string;
+  priceChange?: {
+    h1?: number;
+    h24?: number;
+  };
+  volume?: {
+    h24?: number;
+  };
+  liquidityUsd: number;
+  alphaScore: number;
+  alphaSignal: string;
+  dex: string;
+};
+
+export default function RadarPage() {
+  const [tokens, setTokens] = useState<RadarToken[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/radar", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Unable to load Alpha Radar.");
+        }
+
+        setTokens(Array.isArray(data?.candidates) ? data.candidates : []);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load Alpha Radar."
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  return (
+    <main className="min-h-screen bg-[#100308] text-white">
+      <RugReflexNav />
+
+      <section className="mx-auto max-w-7xl px-5 py-14 sm:px-6 lg:py-20">
+        <div className="max-w-3xl">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-red-300">
+            Alpha Radar
+          </p>
+
+          <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl">
+            Discover signals
+            <span className="block text-white/40">
+              before they become obvious.
+            </span>
+          </h1>
+
+          <p className="mt-5 text-sm leading-7 text-white/50 sm:text-base">
+            RugReflex monitors observable Solana market activity and surfaces
+            tokens showing interesting signals for further investigation.
+          </p>
+        </div>
+
+        <div className="mt-12">
+          {loading && (
+            <div className="rounded-3xl border border-white/[0.07] bg-white/[0.025] p-10 text-center">
+              <p className="text-sm font-bold text-white/50">
+                Scanning current market signals...
+              </p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="rounded-3xl border border-red-400/15 bg-red-500/[0.05] p-8">
+              <p className="text-sm font-bold text-red-300">{error}</p>
+              <Link
+                href="/auth?mode=login"
+                className="mt-5 inline-block rounded-xl bg-white px-5 py-3 text-xs font-black text-[#64122b]"
+              >
+                SIGN IN
+              </Link>
+            </div>
+          )}
+
+          {!loading && !error && tokens.length === 0 && (
+            <div className="rounded-3xl border border-white/[0.07] bg-white/[0.025] p-10 text-center">
+              <p className="text-sm font-bold text-white/60">
+                No Alpha signals detected right now.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}

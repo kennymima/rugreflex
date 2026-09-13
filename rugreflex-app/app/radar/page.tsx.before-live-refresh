@@ -1,0 +1,466 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import RugReflexNav from "@/app/components/RugReflexNav";
+
+type RadarToken = {
+  tokenAddress: string;
+  name: string;
+  symbol: string;
+  icon?: string;
+  priceChange?: {
+    h1?: number;
+    h24?: number;
+  };
+  volume?: {
+    h24?: number;
+  };
+  liquidityUsd: number;
+  alphaScore: number;
+  alphaSignal: string;
+  dex: string;
+};
+
+function formatUsd(value?: number | null) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "Unknown";
+  }
+
+  if (value >= 1_000_000_000) {
+    return `$${(value / 1_000_000_000).toFixed(2)}B`;
+  }
+
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(2)}M`;
+  }
+
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(1)}K`;
+  }
+
+  if (value < 1) {
+    return `$${value.toLocaleString(undefined, {
+      maximumFractionDigits: 8,
+    })}`;
+  }
+
+  return `$${value.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatPercent(value?: number | null) {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function shortenAddress(value?: string) {
+  if (!value) return "Unknown";
+
+  if (value.length <= 14) return value;
+
+  return `${value.slice(0, 6)}...${value.slice(-6)}`;
+}
+
+function signalTone(signal: string) {
+  const value = signal.toLowerCase();
+
+  if (
+    value.includes("strong") ||
+    value.includes("bullish") ||
+    value.includes("momentum")
+  ) {
+    return "border-emerald-400/20 bg-emerald-500/[0.07] text-emerald-300";
+  }
+
+  if (
+    value.includes("watch") ||
+    value.includes("interesting") ||
+    value.includes("emerging")
+  ) {
+    return "border-amber-400/20 bg-amber-500/[0.07] text-amber-300";
+  }
+
+  return "border-red-400/20 bg-red-500/[0.06] text-red-300";
+}
+
+function scoreTone(score: number) {
+  if (score >= 80) return "text-emerald-300";
+  if (score >= 60) return "text-amber-300";
+  return "text-red-300";
+}
+
+export default function RadarPage() {
+  const [tokens, setTokens] = useState<RadarToken[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/radar", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Unable to load Alpha Radar.");
+        }
+
+        setTokens(Array.isArray(data?.candidates) ? data.candidates : []);
+      })
+      .catch((err) => {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load Alpha Radar."
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  const strongestScore =
+    tokens.length > 0
+      ? Math.max(...tokens.map((token) => token.alphaScore))
+      : 0;
+
+  const totalVolume = tokens.reduce(
+    (total, token) => total + (token.volume?.h24 || 0),
+    0
+  );
+
+  const totalLiquidity = tokens.reduce(
+    (total, token) => total + (token.liquidityUsd || 0),
+    0
+  );
+
+  return (
+    <main className="min-h-screen bg-[#100308] text-white">
+      <RugReflexNav />
+
+      <div className="relative overflow-hidden">
+        <div className="pointer-events-none absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 rounded-full bg-red-900/10 blur-[140px]" />
+        <div className="pointer-events-none absolute right-[-180px] top-[420px] h-[420px] w-[420px] rounded-full bg-red-600/[0.05] blur-[120px]" />
+
+        <section className="relative mx-auto max-w-7xl px-5 pb-16 pt-12 sm:px-6 lg:pb-24 lg:pt-16">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-red-400/15 bg-red-500/[0.05] px-3 py-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-400 shadow-[0_0_12px_rgba(248,113,113,0.8)]" />
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-red-300">
+                  Alpha Radar
+                </span>
+              </div>
+
+              <h1 className="mt-6 text-4xl font-black tracking-[-0.04em] sm:text-5xl lg:text-6xl">
+                Market intelligence
+                <span className="block text-white/35">
+                  before the crowd sees it.
+                </span>
+              </h1>
+
+              <p className="mt-6 max-w-2xl text-sm leading-7 text-white/50 sm:text-base">
+                RugReflex monitors observable Solana market activity and
+                surfaces tokens showing unusual momentum, liquidity and market
+                signals for deeper investigation.
+              </p>
+            </div>
+
+            <div className="shrink-0 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5 py-4 backdrop-blur-xl">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">
+                Radar status
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.75)]" />
+                <span className="text-xs font-bold text-white/75">
+                  Live market scan
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-12 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 backdrop-blur-xl">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">
+                Signals detected
+              </p>
+              <p className="mt-3 text-2xl font-black">
+                {loading ? "—" : tokens.length}
+              </p>
+              <p className="mt-1 text-[11px] text-white/35">
+                Current candidates
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 backdrop-blur-xl">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">
+                Strongest alpha
+              </p>
+              <p
+                className={`mt-3 text-2xl font-black ${
+                  loading ? "text-white" : scoreTone(strongestScore)
+                }`}
+              >
+                {loading ? "—" : strongestScore}
+              </p>
+              <p className="mt-1 text-[11px] text-white/35">
+                Highest observed score
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 backdrop-blur-xl">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/30">
+                Market liquidity
+              </p>
+              <p className="mt-3 text-2xl font-black">
+                {loading ? "—" : formatUsd(totalLiquidity)}
+              </p>
+              <p className="mt-1 text-[11px] text-white/35">
+                Across detected candidates
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-10 overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.025] shadow-2xl shadow-black/20 backdrop-blur-xl">
+            <div className="border-b border-white/[0.07] px-6 py-6 sm:px-8">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-300/80">
+                    Intelligence feed
+                  </p>
+                  <h2 className="mt-2 text-xl font-black tracking-tight">
+                    Emerging market signals
+                  </h2>
+                  <p className="mt-1 text-xs leading-5 text-white/35">
+                    Signals are observations for investigation — not financial
+                    advice or guarantees.
+                  </p>
+                </div>
+
+                {!loading && !error && tokens.length > 0 && (
+                  <div className="rounded-xl border border-white/[0.07] bg-black/20 px-4 py-3">
+                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/30">
+                      24h volume
+                    </p>
+                    <p className="mt-1 text-sm font-black text-white/75">
+                      {formatUsd(totalVolume)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6">
+              {loading && (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {[1, 2, 3, 4].map((item) => (
+                    <div
+                      key={item}
+                      className="animate-pulse rounded-2xl border border-white/[0.06] bg-black/20 p-6"
+                    >
+                      <div className="h-4 w-32 rounded bg-white/[0.06]" />
+                      <div className="mt-5 h-8 w-48 rounded bg-white/[0.05]" />
+                      <div className="mt-5 h-3 w-full rounded bg-white/[0.04]" />
+                      <div className="mt-3 h-3 w-3/4 rounded bg-white/[0.04]" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!loading && error && (
+                <div className="rounded-2xl border border-red-400/15 bg-red-500/[0.05] p-8">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-red-300">
+                        Radar unavailable
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-white/70">
+                        {error}
+                      </p>
+                    </div>
+
+                    <Link
+                      href="/auth?mode=login"
+                      className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-5 py-3 text-xs font-black text-[#64122b] transition hover:bg-white/90"
+                    >
+                      SIGN IN
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {!loading && !error && tokens.length === 0 && (
+                <div className="rounded-2xl border border-white/[0.07] bg-black/20 px-6 py-14 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-red-400/15 bg-red-500/[0.06] text-lg">
+                    ◈
+                  </div>
+
+                  <p className="mt-5 text-sm font-black text-white/70">
+                    No Alpha signals detected right now.
+                  </p>
+
+                  <p className="mx-auto mt-2 max-w-md text-xs leading-6 text-white/35">
+                    The radar is continuously looking for observable market
+                    conditions that meet its current signal criteria.
+                  </p>
+                </div>
+              )}
+
+              {!loading && !error && tokens.length > 0 && (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {tokens.map((token, index) => (
+                    <div
+                      key={token.tokenAddress}
+                      className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-black/20 p-6 transition duration-300 hover:border-red-400/20 hover:bg-white/[0.035]"
+                    >
+                      <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-red-500/[0.06] blur-3xl transition duration-500 group-hover:bg-red-500/[0.1]" />
+
+                      <div className="relative">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex min-w-0 items-center gap-4">
+                            {token.icon ? (
+                              <img
+                                src={token.icon}
+                                alt=""
+                                className="h-12 w-12 shrink-0 rounded-2xl border border-white/10 bg-white/[0.04] object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-white/50">
+                                {token.symbol?.slice(0, 1) || "?"}
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h3 className="truncate text-base font-black text-white">
+                                  {token.name || "Unknown Token"}
+                                </h3>
+                                <span className="shrink-0 text-[10px] font-black text-white/30">
+                                  ${token.symbol || "UNKNOWN"}
+                                </span>
+                              </div>
+
+                              <p className="mt-1 font-mono text-[10px] text-white/25">
+                                {shortenAddress(token.tokenAddress)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/25">
+                              Alpha
+                            </p>
+                            <p
+                              className={`mt-1 text-2xl font-black ${scoreTone(
+                                token.alphaScore
+                              )}`}
+                            >
+                              {token.alphaScore}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 flex flex-wrap gap-2">
+                          <span
+                            className={`rounded-lg border px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] ${signalTone(
+                              token.alphaSignal
+                            )}`}
+                          >
+                            {token.alphaSignal}
+                          </span>
+
+                          <span className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.12em] text-white/40">
+                            {token.dex || "DEX"}
+                          </span>
+                        </div>
+
+                        <div className="mt-6 grid grid-cols-3 gap-3">
+                          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                            <p className="text-[8px] font-black uppercase tracking-[0.12em] text-white/25">
+                              1H
+                            </p>
+                            <p
+                              className={`mt-2 text-xs font-black ${
+                                (token.priceChange?.h1 || 0) >= 0
+                                  ? "text-emerald-300"
+                                  : "text-red-300"
+                              }`}
+                            >
+                              {formatPercent(token.priceChange?.h1)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                            <p className="text-[8px] font-black uppercase tracking-[0.12em] text-white/25">
+                              24H
+                            </p>
+                            <p
+                              className={`mt-2 text-xs font-black ${
+                                (token.priceChange?.h24 || 0) >= 0
+                                  ? "text-emerald-300"
+                                  : "text-red-300"
+                              }`}
+                            >
+                              {formatPercent(token.priceChange?.h24)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                            <p className="text-[8px] font-black uppercase tracking-[0.12em] text-white/25">
+                              Liquidity
+                            </p>
+                            <p className="mt-2 text-xs font-black text-white/75">
+                              {formatUsd(token.liquidityUsd)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4">
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-[0.12em] text-white/25">
+                              24H Volume
+                            </p>
+                            <p className="mt-1 text-xs font-bold text-white/60">
+                              {formatUsd(token.volume?.h24)}
+                            </p>
+                          </div>
+
+                          <span className="text-[9px] font-black uppercase tracking-[0.15em] text-red-300/70 transition group-hover:text-red-300">
+                            Investigate →
+                          </span>
+                        </div>
+
+                        <Link
+                          href={`/?token=${encodeURIComponent(
+                            token.tokenAddress
+                          )}`}
+                          className="absolute inset-0"
+                          aria-label={`Investigate ${token.name || token.symbol || "token"}`}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.018] px-5 py-4">
+            <div className="flex flex-col gap-2 text-[10px] leading-5 text-white/30 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                RugReflex Alpha Radar uses observable market signals to identify
+                candidates for further research.
+              </span>
+              <span className="font-black uppercase tracking-[0.12em] text-white/20">
+                Intelligence ≠ prediction
+              </span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}

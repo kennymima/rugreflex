@@ -1,0 +1,77 @@
+ "use client";
+
+import { useState } from "react";
+
+type WalletResult = {
+  success: boolean; address?: string; solBalance?: number;
+  recentTransactionCount?: number; walletAgeDays?: number;
+  incomingTransactionCount?: number; outgoingTransactionCount?: number;
+  neutralTransactionCount?: number; totalIncomingSol?: number; totalOutgoingSol?: number;
+  activityIntensity?: string; activityAssessment?: string; confidence?: string;
+  evidence?: string[]; limitations?: string[]; error?: string;
+};
+
+export default function WalletIntelligencePage() {
+  const [address, setAddress] = useState("");
+  const [result, setResult] = useState<WalletResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function investigate() {
+    const value = address.trim();
+    if (!value) return;
+    setLoading(true); setError(""); setResult(null);
+    try {
+      const response = await fetch(`/api/wallet?address=${encodeURIComponent(value)}`);
+      const data = (await response.json()) as WalletResult;
+      if (!response.ok || !data.success) throw new Error(data.error || "Unable to analyze wallet");
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to analyze wallet");
+    } finally { setLoading(false); }
+  }
+
+  const card = "rounded-2xl border border-red-950/60 bg-[#100708] p-5";
+  const show = (v: unknown) => v === undefined || v === null ? "—" : String(v);
+
+  return (
+    <main className="min-h-screen bg-[#070405] px-4 py-10 text-white">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8">
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.25em] text-red-400">RugReflex Intelligence</p>
+          <h1 className="text-3xl font-black tracking-tight md:text-5xl">Wallet Intelligence</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">Investigate observable Solana wallet activity, balance, history and native SOL flow. RugReflex reports observed evidence, not conclusions about ownership or intent.</p>
+        </div>
+        <section className="rounded-3xl border border-red-950/70 bg-[#0d0607] p-5 md:p-7">
+          <label className="mb-2 block text-xs font-black uppercase tracking-wider text-gray-400">Solana wallet address</label>
+          <div className="flex flex-col gap-3 md:flex-row">
+            <input value={address} onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") investigate(); }} placeholder="Enter a Solana wallet address" className="min-w-0 flex-1 rounded-xl border border-red-950 bg-black px-4 py-3 text-sm outline-none focus:border-red-500" />
+            <button onClick={investigate} disabled={loading || !address.trim()} className="rounded-xl bg-red-600 px-6 py-3 text-sm font-black hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40">{loading ? "Investigating..." : "Investigate Wallet"}</button>
+          </div>
+          {error && <p className="mt-4 text-sm font-bold text-red-400">{error}</p>}
+        </section>
+        {result && (
+          <div className="mt-6 space-y-5">
+            <section className={card}><p className="text-xs font-black uppercase tracking-wider text-gray-500">Investigated address</p><p className="mt-1 break-all font-mono text-sm text-gray-200">{result.address}</p><p className="mt-3 text-xs text-gray-500">Confidence: <span className="font-black text-red-300">{show(result.confidence)}</span></p></section>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className={card}><p className="text-xs text-gray-500">SOL balance</p><p className="mt-2 text-2xl font-black">{show(result.solBalance)}</p></div>
+              <div className={card}><p className="text-xs text-gray-500">Observed age</p><p className="mt-2 text-2xl font-black">{show(result.walletAgeDays)} days</p></div>
+              <div className={card}><p className="text-xs text-gray-500">Recent transactions</p><p className="mt-2 text-2xl font-black">{show(result.recentTransactionCount)}</p></div>
+              <div className={card}><p className="text-xs text-gray-500">Activity</p><p className="mt-2 text-lg font-black text-red-300">{show(result.activityAssessment)}</p></div>
+            </div>
+            <section className={card}><h2 className="text-lg font-black">Observed SOL flow</h2><div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div><p className="text-xs text-gray-500">Incoming</p><p className="mt-1 text-xl font-black">{show(result.incomingTransactionCount)}</p><p className="text-xs text-gray-500">{show(result.totalIncomingSol)} SOL</p></div>
+              <div><p className="text-xs text-gray-500">Outgoing</p><p className="mt-1 text-xl font-black">{show(result.outgoingTransactionCount)}</p><p className="text-xs text-gray-500">{show(result.totalOutgoingSol)} SOL</p></div>
+              <div><p className="text-xs text-gray-500">Neutral</p><p className="mt-1 text-xl font-black">{show(result.neutralTransactionCount)}</p></div>
+            </div></section>
+            <div className="grid gap-5 md:grid-cols-2">
+              <section className={card}><h2 className="text-lg font-black">Evidence</h2><ul className="mt-4 space-y-3 text-sm leading-6 text-gray-300">{(result.evidence || []).map((x, i) => <li key={i}>• {x}</li>)}</ul></section>
+              <section className={card}><h2 className="text-lg font-black">Limitations</h2><ul className="mt-4 space-y-3 text-sm leading-6 text-gray-400">{(result.limitations || []).map((x, i) => <li key={i}>• {x}</li>)}</ul></section>
+            </div>
+          </div>
+        )}
+        <p className="mt-8 text-center text-xs text-gray-600">Observed blockchain intelligence only. Activity does not by itself establish malicious behavior, ownership or affiliation.</p>
+      </div>
+    </main>
+  );
+}

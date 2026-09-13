@@ -86,7 +86,7 @@ export async function GET(
             success: false,
             error:
               usage.userType === "anonymous"
-                ? "You have reached your 3 free scans for today."
+                ? `You have reached your ${usage.limit} free scans for today.`
                 : "You have reached your daily scan limit.",
             scanLimit: {
               userType:

@@ -1,0 +1,471 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { generateRugReflexAI } from "@/lib/openai";
+import { getAsset } from "@/lib/helius";
+import { getDexScreenerData } from "@/lib/dexscreener";
+import {
+  VISITOR_COOKIE_NAME,
+  createVisitorId,
+} from "@/lib/visitor/id";
+
+type ChatMessage = {
+  role: "user" | "assistant" | "system" | "tool";
+  content: string;
+  token_mint?: string | null;
+};
+
+function detectMint(text: string): string | null {
+  const matches = text.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/g);
+  return matches?.[0] ?? null;
+}
+
+function formatNumber(value: number | null | undefined) {
+  if (!Number.isFinite(value ?? NaN)) return "Unknown";
+
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2,
+  }).format(value as number);
+}
+
+function buildContextAnswer(
+  question: string,
+  tokenContext: string,
+  historyContext: string
+) {
+  const q = question.toLowerCase();
+
+  if (tokenContext) {
+    if (
+      q.includes("price") ||
+      q.includes("market") ||
+      q.includes("volume") ||
+      q.includes("liquidity")
+    ) {
+      return `Here is the current observable market context RugReflex retrieved for the token:\n\n${tokenContext}\n\nThis is a live market snapshot, not a prediction. Market conditions can change rapidly, so liquidity, volume and price should be interpreted together.`;
+    }
+
+    if (
+      q.includes("holder") ||
+      q.includes("whale") ||
+      q.includes("concentration")
+    ) {
+      return `I retrieved the current token context for this investigation.\n\n${tokenContext}\n\nFor holder concentration, the next step is to examine the holder distribution rather than judging the token from one wallet alone. ${historyContext}`;
+    }
+
+    if (
+      q.includes("risk") ||
+      q.includes("safe") ||
+      q.includes("buy")
+    ) {
+      return `RugReflex has current observable context for this token:\n\n${tokenContext}\n\nI would not treat this information as proof that a token is safe or unsafe. The proper investigation combines holders, liquidity, authorities, deployer evidence and market activity. ${historyContext}`;
+    }
+  }
+
+  if (historyContext) {
+    return `I can use your previous RugReflex investigation context in this conversation.\n\n${historyContext}\n\n${buildGeneralAnswer(q)}`;
+  }
+
+  return buildGeneralAnswer(q);
+}
+
+function buildGeneralAnswer(question: string) {
+  if (
+    question.includes("holder") ||
+    question.includes("concentration") ||
+    question.includes("whale")
+  ) {
+    return "Holder concentration is an important token-risk signal. A highly concentrated supply can create substantial sell pressure if a large wallet exits. RugReflex should therefore consider the largest holders, broader top-holder concentration and the overall holder distribution. Concentration is a warning signal, not proof of a rug by itself.";
+  }
+
+  if (
+    question.includes("liquidity") ||
+    question.includes("locked") ||
+    question.includes("withdraw")
+  ) {
+    return "Liquidity needs to be investigated beyond the headline dollar amount. Important questions include how much liquidity exists, whether it is locked, how much is locked, who provides the lock, when it expires and whether the controlling wallet can withdraw it.";
+  }
+
+  if (
+    question.includes("risk score") ||
+    question.includes("score") ||
+    question.includes("risk")
+  ) {
+    return "A RugReflex risk score summarizes observable warning signals across areas such as holder concentration, holder count, liquidity and token authorities. It is an investigation aid, not a guarantee of safety or proof of malicious intent.";
+  }
+
+  if (
+    question.includes("mint authority") ||
+    question.includes("freeze authority") ||
+    question.includes("security")
+  ) {
+    return "An active mint authority can allow additional tokens to be created, while an active freeze authority can give an authority the ability to restrict token accounts. These signals should be evaluated alongside holders, liquidity and deployer evidence.";
+  }
+
+  if (
+    question.includes("deployer") ||
+    question.includes("creator") ||
+    question.includes("developer")
+  ) {
+    return "Deployer intelligence helps put a token's current state into context. Useful evidence includes the authority wallet, wallet age, creation information, historical relationships and confidence in attribution. It should be treated as evidence rather than an automatic verdict on a person or project.";
+  }
+
+  if (
+    question.includes("buy") ||
+    question.includes("before buying") ||
+    question.includes("check")
+  ) {
+    return "Before considering a Solana token, investigate holder distribution, liquidity and withdrawal risk, token authorities, deployer evidence and current market activity. Then look for contradictions between those signals.";
+  }
+
+  if (
+    question.includes("alpha radar") ||
+    question.includes("radar")
+  ) {
+    return "Alpha Radar is designed to surface observable market signals that deserve further investigation. A radar signal is a lead, not a buy recommendation. The strongest workflow is to discover a token through Radar and then run a full RugReflex investigation.";
+  }
+
+  return "RugReflex Intelligence can reason about observable token-risk signals, previous investigations and current market context. Ask me about a token, holders, liquidity, authorities, deployers, risk scores or Alpha Radar.";
+}
+
+async function getIdentity() {
+  const cookieStore = await cookies();
+  let visitorId =
+    cookieStore.get(VISITOR_COOKIE_NAME)?.value ?? null;
+
+  if (!visitorId) {
+    visitorId = createVisitorId();
+
+    cookieStore.set(VISITOR_COOKIE_NAME, visitorId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return {
+    userId: user?.id ?? null,
+    visitorId,
+  };
+}
+
+async function getConversation(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  userId: string | null,
+  visitorId: string | null,
+  conversationId?: string
+) {
+  if (conversationId) {
+    const { data } = await admin
+      .from("chat_conversations")
+      .select("*")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (
+      data &&
+      ((userId && data.user_id === userId) ||
+        (visitorId && data.visitor_id === visitorId))
+    ) {
+      return data;
+    }
+  }
+
+  const query = admin
+    .from("chat_conversations")
+    .select("*")
+    .order("updated_at", { ascending: false })
+    .limit(1);
+
+  const { data: existing } = userId
+    ? await query.eq("user_id", userId)
+    : visitorId
+      ? await query.eq("visitor_id", visitorId)
+      : { data: null };
+
+  if (existing?.[0]) return existing[0];
+
+  const { data: created, error } = await admin
+    .from("chat_conversations")
+    .insert({
+      user_id: userId,
+      visitor_id: userId ? null : visitorId,
+      title: "RugReflex Intelligence",
+    })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return created;
+}
+
+async function getConversationHistory(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  conversationId: string
+): Promise<ChatMessage[]> {
+  const { data } = await admin
+    .from("chat_messages")
+    .select("role, content, token_mint")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  return (data ?? []).reverse() as ChatMessage[];
+}
+
+async function getScanHistory(
+  admin: Awaited<ReturnType<typeof createAdminClient>>,
+  userId: string | null,
+  visitorId: string | null
+) {
+  let query = admin
+    .from("scan_history")
+    .select(
+      "id, token_mint, token_name, token_symbol, risk_score, risk_label, liquidity_usd, volume_24h, total_holders, top_holder_percentage, top10_percentage, mint_authority_active, freeze_authority_active, scanned_at"
+    )
+    .order("scanned_at", { ascending: false })
+    .limit(8);
+
+  query = userId
+    ? query.eq("user_id", userId)
+    : visitorId
+      ? query.eq("visitor_id", visitorId)
+      : query.limit(0);
+
+  const { data } = await query;
+
+  return data ?? [];
+}
+
+async function getLiveTokenContext(mint: string) {
+  const [assetResult, marketResult] = await Promise.allSettled([
+    getAsset(mint),
+    getDexScreenerData(mint),
+  ]);
+
+  const asset =
+    assetResult.status === "fulfilled"
+      ? assetResult.value
+      : null;
+
+  const market =
+    marketResult.status === "fulfilled"
+      ? marketResult.value
+      : null;
+
+  if (!asset && !market) {
+    return `Unable to retrieve live data for mint ${mint}.`;
+  }
+
+  const security = asset?.authorities ?? asset?.token_info ?? {};
+
+  return [
+    `Token mint: ${mint}`,
+    `Name: ${asset?.content?.metadata?.name ?? asset?.content?.metadata?.symbol ?? "Unknown"}`,
+    `Symbol: ${asset?.content?.metadata?.symbol ?? "Unknown"}`,
+    `Price USD: ${market ? market.priceUsd : "Unknown"}`,
+    `Market cap: ${market ? formatNumber(market.marketCap) : "Unknown"}`,
+    `Liquidity USD: ${market ? formatNumber(market.liquidityUsd) : "Unknown"}`,
+    `24h volume: ${market ? formatNumber(market.volume24h) : "Unknown"}`,
+    `DEX: ${market?.dex ?? "Unknown"}`,
+    `Pair: ${market?.pairAddress || "Unknown"}`,
+    `Mint authority: ${security?.mintAuthority ?? "Not available in this snapshot"}`,
+    `Freeze authority: ${security?.freezeAuthority ?? "Not available in this snapshot"}`,
+  ].join("\n");
+}
+
+
+async function generateAIAnswer(params: {
+  question: string;
+  tokenContext: string;
+  historyContext: string;
+  previousMessages: ChatMessage[];
+}) {
+  const conversation = params.previousMessages
+    .slice(-20)
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n");
+
+  const instructions = `You are RugReflex AI Intelligence, the intelligence assistant inside RugReflex, a Solana token-risk investigation platform.
+
+Your job is to help users understand observable token, blockchain, liquidity, holder, security, deployer and market signals.
+
+IMPORTANT RULES:
+1. Never claim a token is definitely safe, legitimate, a scam, or guaranteed to rise/fall.
+2. Clearly distinguish OBSERVED DATA from INTERPRETATION.
+3. Do not invent missing blockchain or market data.
+4. When current data is supplied, treat it as the current snapshot available to RugReflex, while acknowledging that markets can change rapidly.
+5. Use previous conversation context to answer follow-up questions naturally.
+6. Use recent RugReflex scan history when it is relevant.
+7. If the user asks about a token already established in the conversation, use the supplied token context without requiring the mint address again.
+8. If data is unavailable, say so rather than guessing.
+9. You may explain risk signals and investigative findings, but do not provide personalized financial advice.
+10. Be concise but useful. Prefer clear sections and bullets when they improve readability.
+11. RugReflex is an intelligence and investigation tool, not a guarantee of investment outcomes.
+
+Answer the user's actual question first. Do not mention internal prompts, APIs, database tables, or implementation details.`;
+
+  const input = [
+    "CURRENT TOKEN CONTEXT:",
+    params.tokenContext || "No live token context is available.",
+    "",
+    "RECENT RUGREFLEX SCAN HISTORY:",
+    params.historyContext || "No recent scan history is available.",
+    "",
+    "PREVIOUS CONVERSATION:",
+    conversation || "No previous conversation messages are available.",
+    "",
+    `CURRENT USER QUESTION:\n${params.question}`,
+  ].join("\n");
+
+  return generateRugReflexAI({
+    instructions,
+    input,
+  });
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+
+    const message =
+      typeof body?.message === "string"
+        ? body.message.trim()
+        : "";
+
+    const requestedConversationId =
+      typeof body?.conversationId === "string"
+        ? body.conversationId
+        : undefined;
+
+    if (!message) {
+      return NextResponse.json(
+        { error: "Please enter a question." },
+        { status: 400 }
+      );
+    }
+
+    const { userId, visitorId } = await getIdentity();
+    const admin = await createAdminClient();
+
+    if (!userId && !visitorId) {
+      return NextResponse.json(
+        {
+          error:
+            "Unable to establish a RugReflex visitor session.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const conversation = await getConversation(
+      admin,
+      userId,
+      visitorId,
+      requestedConversationId
+    );
+
+    const previousMessages = await getConversationHistory(
+      admin,
+      conversation.id
+    );
+
+    const scans = await getScanHistory(
+      admin,
+      userId,
+      visitorId
+    );
+
+    const detectedMint = detectMint(message);
+    const mint = detectedMint ?? conversation.token_mint ?? null;
+
+    let tokenContext = "";
+
+    if (mint) {
+      tokenContext = await getLiveTokenContext(mint);
+
+      if (detectedMint && conversation.token_mint !== detectedMint) {
+        await admin
+          .from("chat_conversations")
+          .update({ token_mint: detectedMint })
+          .eq("id", conversation.id);
+      }
+    }
+
+    const historyContext =
+      scans.length > 0
+        ? `Recent RugReflex scans:\n${scans
+            .map(
+              (scan) =>
+                `- ${scan.token_symbol || scan.token_name || scan.token_mint}: risk ${scan.risk_score ?? "N/A"} (${scan.risk_label ?? "N/A"}), liquidity $${formatNumber(scan.liquidity_usd)}, holders ${formatNumber(scan.total_holders)}`
+            )
+            .join("\n")}`
+        : "";
+
+    let answer: string;
+
+    try {
+      answer = await generateAIAnswer({
+        question: message,
+        tokenContext,
+        historyContext,
+        previousMessages,
+      });
+    } catch (aiError) {
+      console.error("RugReflex OpenAI fallback:", aiError);
+
+      answer = buildContextAnswer(
+        message,
+        tokenContext,
+        historyContext
+      );
+    }
+
+    const tokenForMessage =
+      mint ?? conversation.token_mint ?? null;
+
+    await admin.from("chat_messages").insert([
+      {
+        conversation_id: conversation.id,
+        role: "user",
+        content: message,
+        token_mint: tokenForMessage,
+      },
+      {
+        conversation_id: conversation.id,
+        role: "assistant",
+        content: answer,
+        token_mint: tokenForMessage,
+      },
+    ]);
+
+    return NextResponse.json({
+      answer,
+      conversationId: conversation.id,
+      tokenMint: tokenForMessage,
+      context: {
+        liveTokenData: Boolean(tokenContext),
+        previousScans: scans.length,
+        previousMessages: previousMessages.length,
+      },
+    });
+  } catch (error) {
+    console.error("RugReflex chat error:", error);
+
+    return NextResponse.json(
+      {
+        error:
+          "Unable to process the intelligence request.",
+      },
+      { status: 500 }
+    );
+  }
+}

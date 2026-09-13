@@ -4,6 +4,73 @@ import { buildLiquidityIntelligence } from "@/lib/liquidity/engine";
 import { inspectPumpSwap } from "@/lib/liquidity/adapters/pumpswap";
 import { inspectRaydium } from "@/lib/liquidity/adapters/raydium";
 
+
+async function discoverRaydiumCpmmPools(
+  tokenMint: string
+): Promise<string[]> {
+  const apiKey = process.env.HELIUS_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("HELIUS_API_KEY is missing");
+  }
+
+  const rpcUrl =
+    `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+
+  const response = await fetch(rpcUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "rugreflex-cpmm-discovery",
+      method: "getProgramAccounts",
+      params: [
+        "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+        {
+          encoding: "base64",
+          filters: [
+            {
+              memcmp: {
+                offset: 168,
+                bytes: tokenMint,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Raydium CPMM discovery request failed: ${response.status}`
+    );
+  }
+
+  const result = await response.json();
+
+  if (result?.error) {
+    throw new Error(
+      result.error?.message ||
+        "Raydium CPMM discovery failed."
+    );
+  }
+
+  const accounts = Array.isArray(result?.result)
+    ? result.result
+    : [];
+
+  return accounts
+    .map((account: { pubkey?: string }) => account.pubkey)
+    .filter(
+      (address: unknown): address is string =>
+        typeof address === "string"
+    );
+}
+
 type DexPair = {
   chainId?: string;
   dexId?: string;
@@ -67,9 +134,51 @@ export async function GET(request: NextRequest) {
 
     const result = await response.json();
 
-    const pairs: DexPair[] = Array.isArray(result?.pairs)
+    let pairs: DexPair[] = Array.isArray(result?.pairs)
       ? result.pairs
       : [];
+
+    /*
+     * DexScreener token discovery can occasionally return no pairs
+     * even when a live pool exists. Fall back to on-chain Raydium
+     * CPMM discovery in that case.
+     */
+    if (pairs.length === 0) {
+      const discoveredPools =
+        await discoverRaydiumCpmmPools(address);
+
+      const directPairs = await Promise.all(
+        discoveredPools.slice(0, 10).map(async (poolAddress) => {
+          try {
+            const poolResponse = await fetch(
+              `https://api.dexscreener.com/latest/dex/pairs/solana/${poolAddress}`,
+              {
+                headers: {
+                  Accept: "application/json",
+                },
+                cache: "no-store",
+              }
+            );
+
+            if (!poolResponse.ok) return null;
+
+            const poolResult = await poolResponse.json();
+
+            const directPair = Array.isArray(poolResult?.pairs)
+              ? poolResult.pairs[0]
+              : null;
+
+            return directPair as DexPair | null;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      pairs = directPairs.filter(
+        (pair): pair is DexPair => pair !== null
+      );
+    }
 
     /*
      * Only use Solana pairs.

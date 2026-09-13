@@ -1,0 +1,228 @@
+import {
+  Connection,
+  PublicKey,
+} from "@solana/web3.js";
+
+import {
+  LiquidityPool,
+  LiquidityPoolType,
+  LiquidityPositionModel,
+} from "../types";
+
+const RAYDIUM_AMM_V4_PROGRAM_ID =
+  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+
+const RAYDIUM_CPMM_PROGRAM_ID =
+  "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C";
+
+const RAYDIUM_CLMM_PROGRAM_ID =
+  "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
+
+function getRpcUrl(): string {
+  const apiKey = process.env.HELIUS_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("HELIUS_API_KEY is missing");
+  }
+
+  return `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+}
+
+function unknownLock() {
+  return {
+    status: "UNKNOWN" as const,
+    confidence: "UNKNOWN" as const,
+    provider: null,
+    lockedAmountUsd: null,
+    unlockedAmountUsd: null,
+    lockedPercent: null,
+    unlockTimestamp: null,
+    unlockDate: null,
+    daysRemaining: null,
+  };
+}
+
+function identifyPoolType(
+  owner: PublicKey
+): {
+  poolType: LiquidityPoolType;
+  positionModel: LiquidityPositionModel;
+} | null {
+  const ownerAddress = owner.toBase58();
+
+  if (
+    ownerAddress ===
+    RAYDIUM_AMM_V4_PROGRAM_ID
+  ) {
+    return {
+      poolType: "AMM",
+      positionModel: "FUNGIBLE_LP",
+    };
+  }
+
+  if (
+    ownerAddress ===
+    RAYDIUM_CPMM_PROGRAM_ID
+  ) {
+    return {
+      poolType: "CPMM",
+      positionModel: "FUNGIBLE_LP",
+    };
+  }
+
+  if (
+    ownerAddress ===
+    RAYDIUM_CLMM_PROGRAM_ID
+  ) {
+    return {
+      poolType: "CLMM",
+      positionModel: "NFT_POSITION",
+    };
+  }
+
+  return null;
+}
+
+export interface RaydiumInspectionInput {
+  tokenMint: string;
+  pairAddress: string;
+
+  liquidityUsd?: number | null;
+  volume24h?: number | null;
+}
+
+export interface RaydiumInspectionResult {
+  verified: boolean;
+  pool: LiquidityPool | null;
+  evidence: string[];
+}
+
+export async function inspectRaydium(
+  input: RaydiumInspectionInput
+): Promise<RaydiumInspectionResult> {
+  const evidence: string[] = [];
+
+  try {
+    const tokenMint =
+      new PublicKey(input.tokenMint);
+
+    const pairAddress =
+      new PublicKey(input.pairAddress);
+
+    const connection =
+      new Connection(
+        getRpcUrl(),
+        "confirmed"
+      );
+
+    const accountInfo =
+      await connection.getAccountInfo(
+        pairAddress
+      );
+
+    if (!accountInfo) {
+      return {
+        verified: false,
+        pool: null,
+        evidence: [
+          "Raydium pair account could not be found on-chain.",
+        ],
+      };
+    }
+
+    const poolType =
+      identifyPoolType(accountInfo.owner);
+
+    if (!poolType) {
+      return {
+        verified: false,
+        pool: null,
+        evidence: [
+          "The supplied pair address is not owned by a supported Raydium pool program.",
+        ],
+      };
+    }
+
+    evidence.push(
+      `Raydium pool verified as ${poolType.poolType}.`
+    );
+
+    evidence.push(
+      "Pool account ownership was verified on-chain."
+    );
+
+    evidence.push(
+      "Liquidity lock status remains UNKNOWN until LP ownership, burn state, or a recognized lock mechanism is independently verified."
+    );
+
+    const pool: LiquidityPool = {
+      address:
+        pairAddress.toBase58(),
+
+      dex: "Raydium",
+
+      poolType:
+        poolType.poolType,
+
+      tokenMint:
+        tokenMint.toBase58(),
+
+      liquidityUsd:
+        input.liquidityUsd ?? null,
+
+      volume24h:
+        input.volume24h ?? null,
+
+      positionModel:
+        poolType.positionModel,
+
+      controller: null,
+
+      positions: [],
+
+      lpBurn: {
+        status: "UNKNOWN",
+        confidence: "UNKNOWN",
+        burnedAmountRaw: null,
+        burnedPercent: null,
+        originalSupplyRaw: null,
+        currentSupplyRaw: null,
+        currentSupplyPercentOfOriginal: null,
+        transactionSignature: null,
+        slot: null,
+        timestamp: null,
+      },
+      lock:
+        unknownLock(),
+    };
+
+    return {
+      verified: true,
+      pool,
+      evidence,
+    };
+  } catch (error) {
+    return {
+      verified: false,
+      pool: null,
+      evidence: [
+        error instanceof Error
+          ? `Raydium inspection failed: ${error.message}`
+          : "Raydium inspection failed.",
+      ],
+    };
+  }
+}
+
+export function getRaydiumProgramIds() {
+  return {
+    ammV4:
+      RAYDIUM_AMM_V4_PROGRAM_ID,
+
+    cpmm:
+      RAYDIUM_CPMM_PROGRAM_ID,
+
+    clmm:
+      RAYDIUM_CLMM_PROGRAM_ID,
+  };
+}

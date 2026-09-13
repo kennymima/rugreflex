@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { buildLiquidityIntelligence } from "@/lib/liquidity/engine";
-import { inspectPumpSwap } from "@/lib/liquidity/adapters/pumpswap";
-import { inspectRaydium } from "@/lib/liquidity/adapters/raydium";
-
 type DexPair = {
   chainId?: string;
   dexId?: string;
@@ -88,52 +84,6 @@ export async function GET(request: NextRequest) {
     );
 
     const pair = sortedPairs[0];
-
-    const candidatePairs = sortedPairs.filter((item) => item.pairAddress).slice(0, 10);
-
-    const adapterEvidence: string[] = [];
-
-    const inspectedPools = await Promise.all(candidatePairs.map(async (candidate) => {
-      const pairAddress = candidate.pairAddress;
-
-      if (pairAddress === undefined) return null;
-
-      if ((candidate.dexId || "").toLowerCase() === "pumpswap") {
-        const result = await inspectPumpSwap({
-          tokenMint: address,
-          pairAddress,
-          liquidityUsd: candidate.liquidity?.usd ?? null,
-          volume24h: candidate.volume?.h24 ?? null,
-        });
-
-        adapterEvidence.push(...result.evidence);
-        return result.pool;
-      }
-
-      const dex = (candidate.dexId || "").toLowerCase();
-
-      if (dex === "raydium" || dex === "raydium-clmm") {
-        const result = await inspectRaydium({
-          tokenMint: address,
-          pairAddress,
-          liquidityUsd: candidate.liquidity?.usd ?? null,
-          volume24h: candidate.volume?.h24 ?? null,
-        });
-
-        adapterEvidence.push(...result.evidence);
-        return result.pool;
-      }
-
-      return null;
-    }));
-
-    const verifiedPools = inspectedPools.filter((pool) => pool !== null);
-
-    const intelligence = buildLiquidityIntelligence({
-      tokenMint: address,
-      pools: verifiedPools,
-      evidence: adapterEvidence,
-    });
 
     /*
      * No trading pair found.
@@ -230,8 +180,6 @@ export async function GET(request: NextRequest) {
         pairUrl:
           pair.url || null,
       },
-
-      intelligence,
     });
   } catch (error) {
     console.error(

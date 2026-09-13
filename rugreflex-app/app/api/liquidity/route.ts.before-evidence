@@ -91,48 +91,13 @@ export async function GET(request: NextRequest) {
 
     const candidatePairs = sortedPairs.filter((item) => item.pairAddress).slice(0, 10);
 
-    const adapterEvidence: string[] = [];
-
-    const inspectedPools = await Promise.all(candidatePairs.map(async (candidate) => {
-      const pairAddress = candidate.pairAddress;
-
-      if (pairAddress === undefined) return null;
-
-      if ((candidate.dexId || "").toLowerCase() === "pumpswap") {
-        const result = await inspectPumpSwap({
-          tokenMint: address,
-          pairAddress,
-          liquidityUsd: candidate.liquidity?.usd ?? null,
-          volume24h: candidate.volume?.h24 ?? null,
-        });
-
-        adapterEvidence.push(...result.evidence);
-        return result.pool;
-      }
-
-      const dex = (candidate.dexId || "").toLowerCase();
-
-      if (dex === "raydium" || dex === "raydium-clmm") {
-        const result = await inspectRaydium({
-          tokenMint: address,
-          pairAddress,
-          liquidityUsd: candidate.liquidity?.usd ?? null,
-          volume24h: candidate.volume?.h24 ?? null,
-        });
-
-        adapterEvidence.push(...result.evidence);
-        return result.pool;
-      }
-
-      return null;
-    }));
+    const inspectedPools = await Promise.all(candidatePairs.map(async (candidate) => { const pairAddress = candidate.pairAddress; if (pairAddress === undefined) return null; if ((candidate.dexId || "").toLowerCase() === "pumpswap") { const result = await inspectPumpSwap({ tokenMint: address, pairAddress, liquidityUsd: candidate.liquidity?.usd ?? null, volume24h: candidate.volume?.h24 ?? null }); return result.pool; } const dex = (candidate.dexId || "").toLowerCase(); if (dex === "raydium" || dex === "raydium-clmm") { const result = await inspectRaydium({ tokenMint: address, pairAddress: pairAddress, liquidityUsd: candidate.liquidity?.usd ?? null, volume24h: candidate.volume?.h24 ?? null }); return result.pool; } return null; }));
 
     const verifiedPools = inspectedPools.filter((pool) => pool !== null);
 
     const intelligence = buildLiquidityIntelligence({
       tokenMint: address,
       pools: verifiedPools,
-      evidence: adapterEvidence,
     });
 
     /*

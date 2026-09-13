@@ -1,0 +1,374 @@
+import {
+  LiquidityChange,
+  LiquidityIntelligence,
+  LiquidityLock,
+  LiquidityLPBurn,
+  LiquidityPool,
+} from "./types";
+
+function emptyLock(): LiquidityLock {
+  return {
+    status: "UNKNOWN",
+    confidence: "UNKNOWN",
+    provider: null,
+    lockedAmountUsd: null,
+    unlockedAmountUsd: null,
+    lockedPercent: null,
+    unlockTimestamp: null,
+    unlockDate: null,
+    daysRemaining: null,
+  };
+}
+
+function emptyLpBurn(): LiquidityLPBurn {
+  return {
+    status: "UNKNOWN",
+    confidence: "UNKNOWN",
+    burnedAmountRaw: null,
+    burnedPercent: null,
+    originalSupplyRaw: null,
+    currentSupplyRaw: null,
+    currentSupplyPercentOfOriginal: null,
+    transactionSignature: null,
+    slot: null,
+    timestamp: null,
+  };
+}
+
+function riskLevelFromScore(
+  score: number
+): LiquidityIntelligence["riskLevel"] {
+  if (score <= 20) return "LOW";
+  if (score <= 40) return "MODERATE";
+  if (score <= 60) return "ELEVATED";
+  if (score <= 80) return "HIGH";
+  return "EXTREME";
+}
+
+function calculateLiquidityRiskScore(
+  totalLiquidityUsd: number | null,
+  lock: LiquidityLock,
+  multiplePositions: boolean,
+  concentrationPercent: number | null
+): number | null {
+  if (
+    totalLiquidityUsd === null ||
+    !Number.isFinite(totalLiquidityUsd)
+  ) {
+    return null;
+  }
+
+  let score = 0;
+
+  if (totalLiquidityUsd < 5_000) {
+    score += 45;
+  } else if (totalLiquidityUsd < 25_000) {
+    score += 30;
+  } else if (totalLiquidityUsd < 100_000) {
+    score += 15;
+  } else if (totalLiquidityUsd < 500_000) {
+    score += 5;
+  }
+
+  if (lock.status === "UNLOCKED") {
+    score += 30;
+  } else if (lock.status === "PARTIALLY_LOCKED") {
+    score += 20;
+  } else if (lock.status === "UNKNOWN") {
+    score += 15;
+  }
+
+  if (
+    concentrationPercent !== null &&
+    concentrationPercent < 50
+  ) {
+    score += 15;
+  }
+
+  if (multiplePositions) {
+    score = Math.max(0, score - 5);
+  }
+
+  return Math.min(100, Math.max(0, score));
+}
+
+export function createUnknownLiquidityIntelligence(
+  tokenMint: string
+): LiquidityIntelligence {
+  const pool: LiquidityPool = {
+    address: null,
+    dex: null,
+    poolType: "UNKNOWN",
+    tokenMint,
+    liquidityUsd: null,
+    volume24h: null,
+    positionModel: "UNKNOWN",
+    controller: null,
+    positions: [],
+    lock: emptyLock(),
+    lpBurn: emptyLpBurn(),
+  };
+
+  return {
+    status: "UNKNOWN",
+
+    totalLiquidityUsd: null,
+
+    dex: null,
+    poolAddress: null,
+    poolType: "UNKNOWN",
+    positionModel: "UNKNOWN",
+
+    controller: null,
+
+    lock: emptyLock(),
+
+    lpBurn: emptyLpBurn(),
+
+    pools: [pool],
+
+    changes: [],
+
+    multiplePositions: false,
+
+    liquidityConcentrationPercent: null,
+
+    riskScore: null,
+
+    riskLevel: "UNKNOWN",
+
+    evidence: [
+      "Liquidity control could not be independently verified.",
+    ],
+  };
+}
+
+export interface BuildLiquidityIntelligenceInput {
+  tokenMint: string;
+
+  pools: LiquidityPool[];
+
+  changes?: LiquidityChange[];
+
+  evidence?: string[];
+}
+
+export function buildLiquidityIntelligence(
+  input: BuildLiquidityIntelligenceInput
+): LiquidityIntelligence {
+  const pools = input.pools.filter(
+    (pool) =>
+      pool &&
+      pool.tokenMint === input.tokenMint
+  );
+
+  if (pools.length === 0) {
+    return createUnknownLiquidityIntelligence(
+      input.tokenMint
+    );
+  }
+
+  const validLiquidityPools = pools.filter(
+    (pool) =>
+      pool.liquidityUsd !== null &&
+      Number.isFinite(pool.liquidityUsd) &&
+      pool.liquidityUsd >= 0
+  );
+
+  const totalLiquidityUsd =
+    validLiquidityPools.reduce(
+      (total, pool) =>
+        total + (pool.liquidityUsd || 0),
+      0
+    );
+
+  const primaryPool =
+    [...validLiquidityPools].sort(
+      (a, b) =>
+        (b.liquidityUsd || 0) -
+        (a.liquidityUsd || 0)
+    )[0] || pools[0];
+
+  const primaryLiquidity =
+    primaryPool.liquidityUsd;
+
+  const concentrationPercent =
+    totalLiquidityUsd > 0 &&
+    primaryLiquidity !== null
+      ? Math.round(
+          (primaryLiquidity /
+            totalLiquidityUsd) *
+            10000
+        ) / 100
+      : null;
+
+  const multiplePositions =
+    pools.some(
+      (pool) =>
+        pool.positions.length > 1
+    ) ||
+    pools.length > 1;
+
+  const lockStatuses =
+    pools.map(
+      (pool) => pool.lock.status
+    );
+
+  const allPermanent =
+    lockStatuses.length > 0 &&
+    lockStatuses.every(
+      (status) =>
+        status ===
+        "PERMANENTLY_LOCKED"
+    );
+
+  const allTimeLocked =
+    lockStatuses.length > 0 &&
+    lockStatuses.every(
+      (status) =>
+        status === "TIME_LOCKED"
+    );
+
+  const allUnlocked =
+    lockStatuses.length > 0 &&
+    lockStatuses.every(
+      (status) =>
+        status === "UNLOCKED"
+    );
+
+  const anyPartial =
+    lockStatuses.some(
+      (status) =>
+        status ===
+        "PARTIALLY_LOCKED"
+    );
+
+  const anyUnknown =
+    lockStatuses.some(
+      (status) =>
+        status === "UNKNOWN"
+    );
+
+  let aggregateLock: LiquidityLock;
+
+  if (allPermanent) {
+    aggregateLock = {
+      ...primaryPool.lock,
+      status: "PERMANENTLY_LOCKED",
+    };
+  } else if (allTimeLocked) {
+    aggregateLock = {
+      ...primaryPool.lock,
+      status: "TIME_LOCKED",
+    };
+  } else if (allUnlocked) {
+    aggregateLock = {
+      ...primaryPool.lock,
+      status: "UNLOCKED",
+    };
+  } else if (anyPartial) {
+    aggregateLock = {
+      ...primaryPool.lock,
+      status: "PARTIALLY_LOCKED",
+    };
+  } else if (anyUnknown) {
+    aggregateLock = emptyLock();
+  } else {
+    aggregateLock = emptyLock();
+  }
+
+  const verifiedPools =
+    pools.filter(
+      (pool) =>
+        pool.poolType !== "UNKNOWN"
+    );
+
+  const status:
+    LiquidityIntelligence["status"] =
+    verifiedPools.length === pools.length
+      ? "VERIFIED"
+      : verifiedPools.length > 0
+        ? "PARTIAL"
+        : "UNKNOWN";
+
+  const evidence = [
+    ...(input.evidence || []),
+  ];
+
+  evidence.push(
+    `${verifiedPools.length} of ${pools.length} detected liquidity pool(s) have a recognized pool type.`
+  );
+
+  if (
+    concentrationPercent !== null
+  ) {
+    evidence.push(
+      `Largest detected pool represents approximately ${concentrationPercent}% of observed liquidity.`
+    );
+  }
+
+  if (
+    aggregateLock.status ===
+    "UNKNOWN"
+  ) {
+    evidence.push(
+      "Liquidity lock status remains UNKNOWN because independently verifiable lock or burn evidence was not supplied."
+    );
+  }
+
+  const riskScore =
+    calculateLiquidityRiskScore(
+      totalLiquidityUsd,
+      aggregateLock,
+      multiplePositions,
+      concentrationPercent
+    );
+
+  return {
+    status,
+
+    totalLiquidityUsd,
+
+    dex:
+      primaryPool.dex,
+
+    poolAddress:
+      primaryPool.address,
+
+    poolType:
+      primaryPool.poolType,
+
+    positionModel:
+      primaryPool.positionModel,
+
+    controller:
+      primaryPool.controller,
+
+    lock:
+      aggregateLock,
+
+    lpBurn:
+      primaryPool.lpBurn,
+
+    pools,
+
+    changes:
+      input.changes || [],
+
+    multiplePositions,
+
+    liquidityConcentrationPercent:
+      concentrationPercent,
+
+    riskScore,
+
+    riskLevel:
+      riskScore === null
+        ? "UNKNOWN"
+        : riskLevelFromScore(
+            riskScore
+          ),
+
+    evidence,
+  };
+}

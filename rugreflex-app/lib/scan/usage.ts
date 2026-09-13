@@ -17,57 +17,187 @@ const ANONYMOUS_LIMIT = 30;
 const REGISTERED_LIMIT = 5;
 const PRO_LIMIT = 50;
 
+async function getReferralBonusScans(
+  userId: string
+) {
+  const supabase = await createAdminClient();
+
+  const {
+    data: rewards,
+    error,
+  } = await supabase
+    .from("referral_rewards")
+    .select(
+      "id, reward_scans, scans_used, status"
+    )
+    .eq("referrer_id", userId)
+    .in("status", [
+      "available",
+      "partially_used",
+    ])
+    .order("created_at", {
+      ascending: true,
+    });
+
+  if (error) {
+    console.error(
+      "Referral reward lookup error:",
+      error
+    );
+
+    return {
+      available: 0,
+      rewards: [],
+    };
+  }
+
+  const normalizedRewards =
+    Array.isArray(rewards)
+      ? rewards
+      : [];
+
+  const available =
+    normalizedRewards.reduce(
+      (total, reward) => {
+        const rewardScans =
+          Number(
+            reward.reward_scans
+          ) || 0;
+
+        const scansUsed =
+          Number(
+            reward.scans_used
+          ) || 0;
+
+        return (
+          total +
+          Math.max(
+            0,
+            rewardScans - scansUsed
+          )
+        );
+      },
+      0
+    );
+
+  return {
+    available,
+    rewards:
+      normalizedRewards,
+  };
+}
+
+async function consumeReferralBonusScan(
+  userId: string
+) {
+  const supabase = await createAdminClient();
+
+  const {
+    data: rewards,
+    error,
+  } = await supabase
+    .from("referral_rewards")
+    .select(
+      "id, reward_scans, scans_used"
+    )
+    .eq("referrer_id", userId)
+    .in("status", [
+      "available",
+      "partially_used",
+    ])
+    .order("created_at", {
+      ascending: true,
+    });
+
+  if (error) {
+    console.error(
+      "Referral reward consumption lookup error:",
+      error
+    );
+
+    return false;
+  }
+
+  const rewardList =
+    Array.isArray(rewards)
+      ? rewards
+      : [];
+
+  for (const reward of rewardList) {
+    const rewardScans =
+      Number(
+        reward.reward_scans
+      ) || 0;
+
+    const scansUsed =
+      Number(
+        reward.scans_used
+      ) || 0;
+
+    const remaining =
+      rewardScans - scansUsed;
+
+    if (remaining <= 0) {
+      continue;
+    }
+
+    const newUsed =
+      scansUsed + 1;
+
+    const newStatus =
+      newUsed >= rewardScans
+        ? "used"
+        : "partially_used";
+
+    const { error: updateError } =
+      await supabase
+        .from("referral_rewards")
+        .update({
+          scans_used: newUsed,
+          status: newStatus,
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq("id", reward.id)
+        .eq(
+          "scans_used",
+          scansUsed
+        );
+
+    if (!updateError) {
+      return true;
+    }
+
+    console.error(
+      "Referral reward consumption update error:",
+      updateError
+    );
+  }
+
+  return false;
+}
+
 export async function checkAndConsumeScan(
   visitorId: string | null
 ): Promise<ScanUsageResult> {
-  const supabase = await createAdminClient();
-
-  /*
-   * =====================================================
-   * IDENTIFY USER
-   * =====================================================
-   */
+  const supabase =
+    await createAdminClient();
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } =
+    await supabase.auth.getUser();
 
-  /*
-   * =====================================================
-   * DETERMINE USER TYPE
-   * =====================================================
-   *
-   * For now:
-   *
-   * Anonymous  = 3 scans/day
-   * Registered = 5 scans/day
-   * Pro        = 50 scans/day
-   *
-   * Pro subscription logic will be connected later.
-   */
+  let userType: ScanUserType =
+    "anonymous";
 
-  let userType: ScanUserType = "anonymous";
-  let limit = ANONYMOUS_LIMIT;
+  let limit =
+    ANONYMOUS_LIMIT;
 
   if (user) {
     userType = "registered";
     limit = REGISTERED_LIMIT;
-
-    /*
-     * PRO WILL BE ENABLED HERE LATER.
-     *
-     * Example:
-     *
-     * if (userIsPro) {
-     *   userType = "pro";
-     *   limit = PRO_LIMIT;
-     * }
-     */
   }
-
-  /*
-   * Anonymous users must provide a visitor ID.
-   */
 
   if (!user && !visitorId) {
     throw new Error(
@@ -75,28 +205,19 @@ export async function checkAndConsumeScan(
     );
   }
 
-  /*
-   * =====================================================
-   * TODAY
-   * =====================================================
-   */
-
   const today = new Date()
     .toISOString()
     .slice(0, 10);
-
-  /*
-   * =====================================================
-   * FIND EXISTING USAGE
-   * =====================================================
-   */
 
   let query = supabase
     .from("scan_usage")
     .select(
       "id, scan_count"
     )
-    .eq("scan_date", today)
+    .eq(
+      "scan_date",
+      today
+    )
     .limit(1);
 
   if (user) {
@@ -114,7 +235,8 @@ export async function checkAndConsumeScan(
   const {
     data: existing,
     error: lookupError,
-  } = await query.maybeSingle();
+  } =
+    await query.maybeSingle();
 
   if (lookupError) {
     console.error(
@@ -131,95 +253,160 @@ export async function checkAndConsumeScan(
     existing?.scan_count ?? 0;
 
   /*
-   * =====================================================
-   * LIMIT REACHED
-   * =====================================================
+   * Referral bonuses apply only to
+   * authenticated registered users.
+   *
+   * The normal 5/day allowance is
+   * always consumed first.
    */
+  let referralBonus = 0;
 
-  if (used >= limit) {
+  if (user) {
+    const bonus =
+      await getReferralBonusScans(
+        user.id
+      );
+
+    referralBonus =
+      bonus.available;
+  }
+
+  const totalAvailable =
+    limit + referralBonus;
+
+  if (
+    used >= totalAvailable
+  ) {
     return {
       allowed: false,
       userType,
-      limit,
+      limit: totalAvailable,
       used,
       remaining: 0,
     };
   }
 
   /*
-   * =====================================================
-   * CONSUME SCAN
-   * =====================================================
+   * Normal daily allowance:
+   * continue using scan_usage exactly
+   * as before.
    */
+  if (used < limit) {
+    const newCount =
+      used + 1;
 
-  const newCount =
-    used + 1;
+    if (existing) {
+      const { error } =
+        await supabase
+          .from("scan_usage")
+          .update({
+            scan_count:
+              newCount,
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            "id",
+            existing.id
+          );
 
-  if (existing) {
-    const { error } =
-      await supabase
-        .from("scan_usage")
-        .update({
-          scan_count: newCount,
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq("id", existing.id);
+      if (error) {
+        console.error(
+          "Scan usage update error:",
+          error
+        );
 
-    if (error) {
-      console.error(
-        "Scan usage update error:",
-        error
-      );
+        throw new Error(
+          "Unable to record scan usage."
+        );
+      }
+    } else {
+      const row = {
+        user_id:
+          user?.id ?? null,
 
-      throw new Error(
-        "Unable to record scan usage."
-      );
+        visitor_id:
+          user
+            ? null
+            : visitorId,
+
+        scan_date:
+          today,
+
+        scan_count: 1,
+
+        updated_at:
+          new Date().toISOString(),
+      };
+
+      const { error } =
+        await supabase
+          .from("scan_usage")
+          .insert(row);
+
+      if (error) {
+        console.error(
+          "Scan usage insert error:",
+          error
+        );
+
+        throw new Error(
+          "Unable to record scan usage."
+        );
+      }
     }
-  } else {
-    const row = {
-      user_id:
-        user?.id ?? null,
 
-      visitor_id:
-        user
-          ? null
-          : visitorId,
-
-      scan_date: today,
-
-      scan_count: 1,
-
-      updated_at:
-        new Date().toISOString(),
+    return {
+      allowed: true,
+      userType,
+      limit: totalAvailable,
+      used: newCount,
+      remaining:
+        Math.max(
+          0,
+          totalAvailable -
+            newCount
+        ),
     };
+  }
 
-    const { error } =
-      await supabase
-        .from("scan_usage")
-        .insert(row);
-
-    if (error) {
-      console.error(
-        "Scan usage insert error:",
-        error
+  /*
+   * Base allowance has been exhausted.
+   * Consume one referral reward instead.
+   *
+   * scan_usage is deliberately NOT
+   * increased for referral scans.
+   */
+  if (
+    user &&
+    referralBonus > 0
+  ) {
+    const consumed =
+      await consumeReferralBonusScan(
+        user.id
       );
 
-      throw new Error(
-        "Unable to record scan usage."
-      );
+    if (consumed) {
+      return {
+        allowed: true,
+        userType,
+        limit: totalAvailable,
+        used,
+        remaining:
+          Math.max(
+            0,
+            totalAvailable -
+              (used + 1)
+          ),
+      };
     }
   }
 
   return {
-    allowed: true,
+    allowed: false,
     userType,
-    limit,
-    used: newCount,
-    remaining:
-      Math.max(
-        0,
-        limit - newCount
-      ),
+    limit: totalAvailable,
+    used,
+    remaining: 0,
   };
 }

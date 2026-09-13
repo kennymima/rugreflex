@@ -1,0 +1,639 @@
+import {
+  Connection,
+  PublicKey,
+} from "@solana/web3.js";
+
+import {
+  getMint,
+  TOKEN_2022_PROGRAM_ID,
+} from "@solana/spl-token";
+
+import {
+  canonicalPumpPoolPdaWithQuote,
+  getPumpAmmProgram,
+} from "@pump-fun/pump-sdk";
+
+import {
+  LiquidityLPBurn,
+  LiquidityPool,
+} from "../types";
+
+const PUMPSWAP_PROGRAM_ID =
+  "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+
+const SOL_MINT =
+  "So11111111111111111111111111111111111111112";
+
+function getRpcUrl(): string {
+  const apiKey =
+    process.env.HELIUS_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "HELIUS_API_KEY is missing"
+    );
+  }
+
+  return `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+}
+
+function unknownLock() {
+  return {
+    status: "UNKNOWN" as const,
+    confidence: "UNKNOWN" as const,
+    provider: null,
+    lockedAmountUsd: null,
+    unlockedAmountUsd: null,
+    lockedPercent: null,
+    unlockTimestamp: null,
+    unlockDate: null,
+    daysRemaining: null,
+  };
+}
+
+function unknownLpBurn(): LiquidityLPBurn {
+  return {
+    status: "UNKNOWN",
+    confidence: "UNKNOWN",
+    burnedAmountRaw: null,
+    burnedPercent: null,
+    originalSupplyRaw: null,
+    currentSupplyRaw: null,
+    currentSupplyPercentOfOriginal: null,
+    transactionSignature: null,
+    slot: null,
+    timestamp: null,
+  };
+}
+
+export interface PumpSwapInspectionInput {
+  tokenMint: string;
+  pairAddress: string;
+
+  liquidityUsd?: number | null;
+  volume24h?: number | null;
+}
+
+export interface PumpSwapInspectionResult {
+  verified: boolean;
+  pool: LiquidityPool | null;
+  evidence: string[];
+}
+
+interface BurnEvidence {
+  amountRaw: string;
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+}
+
+function collectParsedInstructions(
+  transaction: any
+): any[] {
+  const instructions: any[] = [];
+
+  const topLevel =
+    transaction?.transaction?.message?.instructions;
+
+  if (Array.isArray(topLevel)) {
+    instructions.push(...topLevel);
+  }
+
+  const inner =
+    transaction?.meta?.innerInstructions;
+
+  if (Array.isArray(inner)) {
+    for (const group of inner) {
+      if (Array.isArray(group?.instructions)) {
+        instructions.push(...group.instructions);
+      }
+    }
+  }
+
+  return instructions;
+}
+
+function findLpBurn(
+  transaction: any,
+  lpMint: string
+): string | null {
+  const instructions =
+    collectParsedInstructions(transaction);
+
+  let totalBurned = BigInt(0);
+
+  for (const instruction of instructions) {
+    if (
+      instruction?.program !== "spl-token" &&
+      instruction?.program !== "spl-token-2022"
+    ) {
+      continue;
+    }
+
+    const parsed =
+      instruction?.parsed;
+
+    if (!parsed || parsed.type !== "burn") {
+      continue;
+    }
+
+    const info =
+      parsed.info;
+
+    if (
+      !info ||
+      info.mint !== lpMint
+    ) {
+      continue;
+    }
+
+    const amount =
+      info.amount;
+
+    if (
+      typeof amount !== "string" &&
+      typeof amount !== "number"
+    ) {
+      continue;
+    }
+
+    totalBurned += BigInt(
+      String(amount)
+    );
+  }
+
+  if (totalBurned <= BigInt(0)) {
+    return null;
+  }
+
+  return totalBurned.toString();
+}
+
+async function detectCreationBurn(
+  connection: Connection,
+  poolAddress: PublicKey,
+  lpMint: string
+): Promise<BurnEvidence | null> {
+  const signatures =
+    await connection.getSignaturesForAddress(
+      new PublicKey(lpMint),
+      { limit: 1000 }
+    );
+
+  if (!signatures.length) {
+    return null;
+  }
+
+  const ordered = [...signatures].reverse();
+
+  for (const signatureInfo of ordered) {
+    const transaction =
+      await connection.getParsedTransaction(
+        signatureInfo.signature,
+        { maxSupportedTransactionVersion: 0 }
+      );
+
+    if (!transaction) {
+      continue;
+    }
+
+    const burned =
+      findLpBurn(
+        transaction,
+        lpMint
+      );
+
+    if (!burned) {
+      continue;
+    }
+
+    const mentionsPool =
+      transaction?.transaction?.message?.accountKeys?.some(
+        (account: any) =>
+          account?.pubkey?.toString() ===
+          poolAddress.toString()
+      ) ?? false;
+
+    if (!mentionsPool) {
+      continue;
+    }
+
+    return {
+      amountRaw: burned,
+      signature: signatureInfo.signature,
+      slot: signatureInfo.slot,
+      blockTime: signatureInfo.blockTime ?? null,
+    };
+  }
+
+  return null;
+}
+
+async function inspectLpPositions(
+  connection: Connection,
+  lpMint: string,
+  liquidityUsd: number | null
+) {
+  const accounts =
+    await connection.getParsedProgramAccounts(
+      TOKEN_2022_PROGRAM_ID,
+      {
+        filters: [
+          {
+            memcmp: {
+              offset: 0,
+              bytes: lpMint,
+            },
+          },
+        ],
+      }
+    );
+
+  const holders = accounts
+    .map((item: any) => {
+      const info =
+        item.account.data.parsed?.info;
+
+      const amountRaw =
+        info?.tokenAmount?.amount;
+
+      const owner =
+        info?.owner ?? null;
+
+      if (
+        typeof amountRaw !== "string" ||
+        amountRaw === "0"
+      ) {
+        return null;
+      }
+
+      return {
+        address: item.pubkey.toBase58(),
+        owner,
+        amountRaw,
+      };
+    })
+    .filter(Boolean);
+
+  const totalRaw =
+    holders.reduce(
+      (sum: bigint, holder: any) =>
+        sum + BigInt(holder.amountRaw),
+      BigInt(0)
+    );
+
+  return holders.map((holder: any) => {
+    const share =
+      totalRaw > BigInt(0)
+        ? Number(
+            (BigInt(holder.amountRaw) * BigInt(10000)) /
+              totalRaw
+          ) / 100
+        : 0;
+
+    return {
+      address: holder.address,
+      model: "FUNGIBLE_LP" as const,
+      owner: holder.owner,
+      controller: holder.owner,
+      amountRaw: holder.amountRaw,
+      liquidityUsd:
+        liquidityUsd !== null
+          ? (liquidityUsd * share) / 100
+          : null,
+      lock: unknownLock(),
+      sharePercent: share,
+    };
+  });
+}
+
+async function inspectLpBurn(
+  connection: Connection,
+  poolAddress: PublicKey,
+  lpMint: string,
+  originalLpSupplyRaw: string,
+  evidence: string[]
+): Promise<LiquidityLPBurn> {
+  try {
+    const mint =
+      await getMint(
+        connection,
+        new PublicKey(lpMint),
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID
+      );
+
+    const currentSupplyRaw =
+      mint.supply.toString();
+
+    const original =
+      BigInt(originalLpSupplyRaw);
+
+    const current =
+      BigInt(currentSupplyRaw);
+
+    const creationBurn =
+      await detectCreationBurn(
+        connection,
+        poolAddress,
+        lpMint
+      );
+
+    const currentPercent =
+      original > BigInt(0)
+        ? Number(
+            (current * BigInt(10000)) /
+              original
+          ) / 100
+        : null;
+
+    if (!creationBurn) {
+      evidence.push(
+        "No explicit LP burn instruction was verified in the pool creation transaction."
+      );
+
+      return {
+        status: "NOT_VERIFIED",
+        confidence: "LOW",
+        burnedAmountRaw: null,
+        burnedPercent: null,
+        originalSupplyRaw: originalLpSupplyRaw,
+        currentSupplyRaw,
+        currentSupplyPercentOfOriginal:
+          currentPercent,
+        transactionSignature: null,
+        slot: null,
+        timestamp: null,
+      };
+    }
+
+    const burned =
+      BigInt(
+        creationBurn.amountRaw
+      );
+
+    const burnedPercent =
+      original > BigInt(0)
+        ? Number(
+            (burned * BigInt(10000)) /
+              original
+          ) / 100
+        : null;
+
+    evidence.push(
+      `Verified LP burn of ${creationBurn.amountRaw} raw LP tokens in the pool creation transaction.`
+    );
+
+    if (burnedPercent !== null) {
+      evidence.push(
+        `Approximately ${burnedPercent.toFixed(2)}% of the original LP supply was burned at pool creation.`
+      );
+    }
+
+    evidence.push(
+      `LP burn transaction: ${creationBurn.signature}.`
+    );
+
+    const currentPercentDisplay =
+      currentPercent === null
+        ? "UNKNOWN"
+        : currentPercent > 0 && currentPercent < 0.01
+          ? "<0.01"
+          : currentPercent.toFixed(2);
+
+    evidence.push(
+      `Current LP supply is approximately ${currentPercentDisplay}% of the original pool LP supply.`
+    );
+
+    return {
+      status: "VERIFIED",
+      confidence: "VERIFIED",
+      burnedAmountRaw:
+        creationBurn.amountRaw,
+      burnedPercent,
+      originalSupplyRaw: originalLpSupplyRaw,
+      currentSupplyRaw,
+      currentSupplyPercentOfOriginal:
+        currentPercent,
+      transactionSignature:
+        creationBurn.signature,
+      slot: creationBurn.slot,
+      timestamp:
+        creationBurn.blockTime,
+    };
+  } catch (error) {
+    evidence.push(
+      error instanceof Error
+        ? `LP burn inspection unavailable: ${error.message}`
+        : "LP burn inspection unavailable."
+    );
+
+    return unknownLpBurn();
+  }
+}
+
+export async function inspectPumpSwap(
+  input: PumpSwapInspectionInput
+): Promise<PumpSwapInspectionResult> {
+  const evidence: string[] = [];
+
+  try {
+    const tokenMint =
+      new PublicKey(input.tokenMint);
+
+    const pairAddress =
+      new PublicKey(input.pairAddress);
+
+    const connection =
+      new Connection(
+        getRpcUrl(),
+        "confirmed"
+      );
+
+    const accountInfo =
+      await connection.getAccountInfo(
+        pairAddress
+      );
+
+    if (!accountInfo) {
+      return {
+        verified: false,
+        pool: null,
+        evidence: [
+          "PumpSwap pair account could not be found on-chain.",
+        ],
+      };
+    }
+
+    const programId =
+      new PublicKey(
+        PUMPSWAP_PROGRAM_ID
+      );
+
+    if (
+      !accountInfo.owner.equals(programId)
+    ) {
+      return {
+        verified: false,
+        pool: null,
+        evidence: [
+          "The supplied pair address is not owned by the PumpSwap program.",
+        ],
+      };
+    }
+
+    evidence.push(
+      "Pool account is owned by the PumpSwap program."
+    );
+
+    const pumpProgram =
+      getPumpAmmProgram(
+        connection
+      );
+
+    const decoded =
+      pumpProgram.coder.accounts.decode(
+        "pool",
+        accountInfo.data
+      );
+
+    const baseMint =
+      decoded.baseMint.toBase58();
+
+    const quoteMint =
+      decoded.quoteMint.toBase58();
+
+    const lpMint =
+      decoded.lpMint.toBase58();
+
+    const originalLpSupplyRaw =
+      decoded.lpSupply.toString();
+
+    const canonicalPool =
+      canonicalPumpPoolPdaWithQuote(
+        tokenMint,
+        new PublicKey(quoteMint)
+      );
+
+    const isCanonical =
+      canonicalPool.equals(
+        pairAddress
+      );
+
+    if (baseMint !== tokenMint.toBase58()) {
+      return {
+        verified: false,
+        pool: null,
+        evidence: [
+          "PumpSwap pool was found, but its base mint does not match the scanned token.",
+        ],
+      };
+    }
+
+    evidence.push(
+      `PumpSwap pool decoded successfully. LP mint: ${lpMint}.`
+    );
+
+    evidence.push(
+      `Original PumpSwap LP supply: ${originalLpSupplyRaw} raw tokens.`
+    );
+
+    if (isCanonical) {
+      evidence.push(
+        "Pool is the canonical PumpSwap pool for this token and quote mint."
+      );
+    } else {
+      evidence.push(
+        "Pool is PumpSwap-owned but is not the canonical pool derived from the scanned token and quote mint."
+      );
+    }
+
+    if (
+      quoteMint === SOL_MINT
+    ) {
+      evidence.push(
+        "PumpSwap quote mint is native wrapped SOL."
+      );
+    }
+
+    const lpBurn =
+      await inspectLpBurn(
+        connection,
+        pairAddress,
+        lpMint,
+        originalLpSupplyRaw,
+        evidence
+      );
+
+    if (
+      lpBurn.status === "VERIFIED"
+    ) {
+      evidence.push(
+        "LP burn evidence was verified, but remaining LP tokens are still live; this is not treated as a fully burned LP position or as liquidity locking."
+      );
+    }
+
+    const positionModel =
+      "FUNGIBLE_LP" as const;
+
+    const positions =
+      await inspectLpPositions(
+        connection,
+        lpMint,
+        input.liquidityUsd ?? null
+      );
+
+    evidence.push(
+      `PumpSwap LP position analysis found ${positions.length} non-zero LP token accounts.`
+    );
+
+    const pool: LiquidityPool = {
+      address:
+        pairAddress.toBase58(),
+
+      dex: "PumpSwap",
+
+      poolType: "PUMPSWAP",
+
+      tokenMint:
+        tokenMint.toBase58(),
+
+      liquidityUsd:
+        input.liquidityUsd ?? null,
+
+      volume24h:
+        input.volume24h ?? null,
+
+      positionModel,
+
+      controller: null,
+
+      positions,
+
+      lock:
+        unknownLock(),
+
+      lpBurn,
+    };
+
+    return {
+      verified: true,
+      pool,
+      evidence,
+    };
+  } catch (error) {
+    return {
+      verified: false,
+      pool: null,
+      evidence: [
+        error instanceof Error
+          ? `PumpSwap inspection failed: ${error.message}`
+          : "PumpSwap inspection failed.",
+      ],
+    };
+  }
+}
+
+export function getPumpSwapProgramId(): string {
+  return PUMPSWAP_PROGRAM_ID;
+}

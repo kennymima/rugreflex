@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  createClient,
-  createAdminClient,
-} from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 
 function generateReferralCode(length = 8) {
   const characters =
@@ -30,10 +27,14 @@ async function getAuthenticatedUser() {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    return null;
+    return {
+      user: null,
+    };
   }
 
-  return user;
+  return {
+    user,
+  };
 }
 
 async function ensureReferralProfile(
@@ -106,7 +107,7 @@ async function ensureReferralProfile(
 
 export async function GET() {
   try {
-    const user =
+    const { user } =
       await getAuthenticatedUser();
 
     if (!user) {
@@ -156,38 +157,11 @@ export async function GET() {
       );
     }
 
-    const {
-      data: rewards,
-      error: rewardsError,
-    } = await supabase
-      .from("referral_rewards")
-      .select(
-        "id, referral_id, reward_scans, scans_used, status, created_at, updated_at"
-      )
-      .eq(
-        "referrer_id",
-        user.id
-      )
-      .order(
-        "created_at",
-        {
-          ascending: false,
-        }
-      );
-
-    if (rewardsError) {
-      throw new Error(
-        rewardsError.message
-      );
-    }
-
     return NextResponse.json({
       success: true,
       profile,
       referrals:
         referrals ?? [],
-      rewards:
-        rewards ?? [],
     });
   } catch (error) {
     console.error(
@@ -220,7 +194,7 @@ export async function POST(
   request: Request
 ) {
   try {
-    const user =
+    const { user } =
       await getAuthenticatedUser();
 
     if (!user) {
@@ -322,8 +296,7 @@ export async function POST(
     }
 
     /*
-     * Prevent the same account from
-     * being referred more than once.
+     * Prevent duplicate referrals.
      */
 
     const {
@@ -348,20 +321,23 @@ export async function POST(
     }
 
     if (existingReferral) {
-      return NextResponse.json({
-        success: true,
-        alreadyReferred: true,
-        message:
-          "This account has already been referred.",
-      });
+      return NextResponse.json(
+        {
+          success: true,
+          alreadyReferred: true,
+          message:
+            "This account has already been referred.",
+        }
+      );
     }
 
     /*
-     * Create the successful referral.
+     * Record the successful referral.
      *
-     * The reward is created separately.
-     * This keeps referral rewards independent
-     * from the existing scan allowance system.
+     * Reward is recorded as pending for now.
+     * Actual scan credit will be connected
+     * separately so we do not interfere with
+     * the existing scan allowance system.
      */
 
     const {
@@ -399,52 +375,6 @@ export async function POST(
     }
 
     /*
-     * Create exactly one reward ledger entry.
-     */
-
-    const {
-      data: reward,
-      error: rewardError,
-    } = await supabase
-      .from("referral_rewards")
-      .insert({
-        referrer_id:
-          referrerProfile.user_id,
-
-        referral_id:
-          referral.id,
-
-        reward_scans: 1,
-
-        scans_used: 0,
-
-        status:
-          "available",
-      })
-      .select("*")
-      .single();
-
-    if (rewardError) {
-      /*
-       * If reward creation fails, remove the
-       * referral we just created so we do not
-       * leave an incomplete referral behind.
-       */
-
-      await supabase
-        .from("referrals")
-        .delete()
-        .eq(
-          "id",
-          referral.id
-        );
-
-      throw new Error(
-        rewardError.message
-      );
-    }
-
-    /*
      * Update referrer statistics.
      */
 
@@ -455,7 +385,7 @@ export async function POST(
     } = await supabase
       .from("referral_profiles")
       .select(
-        "total_referrals, successful_referrals, scans_earned"
+        "total_referrals, successful_referrals"
       )
       .eq(
         "user_id",
@@ -482,10 +412,6 @@ export async function POST(
           (currentProfile.successful_referrals ??
             0) + 1,
 
-        scans_earned:
-          (currentProfile.scans_earned ??
-            0) + (reward.reward_scans ?? 0),
-
         updated_at:
           new Date().toISOString(),
       })
@@ -505,7 +431,6 @@ export async function POST(
       message:
         "Referral recorded successfully.",
       referral,
-      reward,
     });
   } catch (error) {
     console.error(

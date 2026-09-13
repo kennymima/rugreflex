@@ -455,7 +455,7 @@ export async function POST(
     } = await supabase
       .from("referral_profiles")
       .select(
-        "total_referrals, successful_referrals, scans_earned"
+        "total_referrals, successful_referrals"
       )
       .eq(
         "user_id",
@@ -481,10 +481,6 @@ export async function POST(
         successful_referrals:
           (currentProfile.successful_referrals ??
             0) + 1,
-
-        scans_earned:
-          (currentProfile.scans_earned ??
-            0) + (reward.reward_scans ?? 0),
 
         updated_at:
           new Date().toISOString(),

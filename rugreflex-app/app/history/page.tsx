@@ -1,4 +1,5 @@
 "use client";
+import RugReflexNav from "@/app/components/RugReflexNav";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -161,35 +162,16 @@ export default function HistoryPage() {
     }, [history, search]);
 
   return (
-    <main className="min-h-screen bg-[#100308] text-white">
+    <>
+    <RugReflexNav />
+
+      <main className="min-h-screen bg-[#100308] text-white">
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-40 left-1/2 h-[500px] w-[700px] -translate-x-1/2 rounded-full bg-[#800020]/20 blur-[140px]" />
         <div className="absolute top-[45%] -left-40 h-[400px] w-[400px] rounded-full bg-[#4a0014]/20 blur-[130px]" />
       </div>
 
-      <nav className="relative z-10 border-b border-white/10 bg-[#100308]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-          <a
-            href="/"
-            className="font-black tracking-[0.25em] text-lg"
-          >
-            RUGREFLEX
-          </a>
-
-          <div className="flex items-center gap-5">
-            <a
-              href="/"
-              className="text-sm text-white/60 transition hover:text-white"
-            >
-              Scanner
-            </a>
-
-            <span className="text-sm font-semibold text-white">
-              History
-            </span>
-          </div>
-        </div>
-      </nav>
+      
 
       <section className="relative z-10 mx-auto max-w-7xl px-6 py-12">
         <div className="mb-10">
@@ -389,5 +371,6 @@ export default function HistoryPage() {
           )}
       </section>
     </main>
+    </>
   );
 }

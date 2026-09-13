@@ -1,0 +1,149 @@
+export type LiquidityLockStatus =
+  | "PERMANENTLY_LOCKED"
+  | "TIME_LOCKED"
+  | "PARTIALLY_LOCKED"
+  | "UNLOCKED"
+  | "UNKNOWN";
+
+export type LiquidityConfidence =
+  | "VERIFIED"
+  | "HIGH"
+  | "MEDIUM"
+  | "LOW"
+  | "UNKNOWN";
+
+export type LiquidityPoolType =
+  | "AMM"
+  | "CLMM"
+  | "DLMM"
+  | "CPMM"
+  | "PUMPSWAP"
+  | "UNKNOWN";
+
+export type LiquidityPositionModel =
+  | "FUNGIBLE_LP"
+  | "NFT_POSITION"
+  | "PROGRAM_OWNED"
+  | "BURNED_LP"
+  | "UNKNOWN";
+
+export interface LiquidityLock {
+  status: LiquidityLockStatus;
+  confidence: LiquidityConfidence;
+
+  provider: string | null;
+
+  lockedAmountUsd: number | null;
+  unlockedAmountUsd: number | null;
+  lockedPercent: number | null;
+
+  unlockTimestamp: number | null;
+  unlockDate: string | null;
+  daysRemaining: number | null;
+}
+
+export interface LiquidityLPBurn {
+  status: "VERIFIED" | "NOT_VERIFIED" | "UNKNOWN";
+  confidence: LiquidityConfidence;
+
+  burnedAmountRaw: string | null;
+  burnedPercent: number | null;
+
+  originalSupplyRaw: string | null;
+  currentSupplyRaw: string | null;
+  currentSupplyPercentOfOriginal: number | null;
+
+  transactionSignature: string | null;
+  slot: number | null;
+  timestamp: number | null;
+}
+
+export interface LiquidityPosition {
+  address: string | null;
+  model: LiquidityPositionModel;
+
+  owner: string | null;
+  controller: string | null;
+
+  amountRaw: string | null;
+  sharePercent: number | null;
+
+  liquidityUsd: number | null;
+
+  lock: LiquidityLock;
+}
+
+export interface LiquidityPool {
+  address: string | null;
+
+  dex: string | null;
+  poolType: LiquidityPoolType;
+
+  tokenMint: string;
+
+  liquidityUsd: number | null;
+  volume24h: number | null;
+
+  positionModel: LiquidityPositionModel;
+
+  controller: string | null;
+
+  positions: LiquidityPosition[];
+
+  lock: LiquidityLock;
+
+  lpBurn: LiquidityLPBurn;
+}
+
+export interface LiquidityChange {
+  timestamp: number;
+  liquidityUsd: number | null;
+  changeUsd: number | null;
+  changePercent: number | null;
+  type:
+    | "ADDED"
+    | "REMOVED"
+    | "INCREASED"
+    | "DECREASED"
+    | "UNKNOWN";
+}
+
+export interface LiquidityIntelligence {
+  status:
+    | "VERIFIED"
+    | "PARTIAL"
+    | "UNKNOWN";
+
+  totalLiquidityUsd: number | null;
+
+  dex: string | null;
+  poolAddress: string | null;
+  poolType: LiquidityPoolType;
+  positionModel: LiquidityPositionModel;
+
+  controller: string | null;
+
+  lock: LiquidityLock;
+
+  lpBurn: LiquidityLPBurn;
+
+  pools: LiquidityPool[];
+
+  changes: LiquidityChange[];
+
+  multiplePositions: boolean;
+
+  liquidityConcentrationPercent: number | null;
+
+  riskScore: number | null;
+
+  riskLevel:
+    | "LOW"
+    | "MODERATE"
+    | "ELEVATED"
+    | "HIGH"
+    | "EXTREME"
+    | "UNKNOWN";
+
+  evidence: string[];
+}
