@@ -222,7 +222,7 @@ export default function AuthPage() {
           );
         }
 
-        router.push("/");
+        router.push("/dashboard");
         router.refresh();
         return;
       }
@@ -254,7 +254,7 @@ export default function AuthPage() {
       await processReferral();
     }
 
-    router.push("/");
+    router.push("/dashboard");
     router.refresh();
   }
 
