@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import AuthGateModal from "@/app/components/AuthGateModal";
 
 type ProPlan = {
   id: number;
@@ -29,6 +31,10 @@ export default function ProPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [paymentLoading, setPaymentLoading] = useState<number | null>(null);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [transactionSignature, setTransactionSignature] = useState("");
+  const [paymentSuccess, setPaymentSuccess] = useState("");
+  const [authGateOpen, setAuthGateOpen] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<Record<number, string>>({});
   const [payment, setPayment] = useState<{
     reference: string;
@@ -67,8 +73,17 @@ export default function ProPage() {
     });
 
   async function createPayment(planId: number, currency: string) {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getUser();
+
+    if (!data.user) {
+      setAuthGateOpen(true);
+      return;
+    }
     setPaymentLoading(planId);
     setError("");
+    setPaymentSuccess("");
+    setTransactionSignature("");
     setPayment(null);
 
     try {
@@ -86,7 +101,16 @@ export default function ProPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Unable to create payment.");
+        throw new Error(
+          [
+            data?.error || "Unable to create payment.",
+            data?.details,
+            data?.code ? `Code: ${data.code}` : null,
+            data?.hint ? `Hint: ${data.hint}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ")
+        );
       }
 
       setPayment({
@@ -106,7 +130,58 @@ export default function ProPage() {
     }
   }
 
+  async function verifyPayment() {
+    if (!payment) return;
+
+    const signature = transactionSignature.trim();
+
+    if (!signature) {
+      setError("Enter the Solana transaction signature.");
+      return;
+    }
+
+    setVerifyLoading(true);
+    setError("");
+    setPaymentSuccess("");
+
+    try {
+      const response = await fetch("/api/pro/payment/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reference: payment.reference,
+          transactionSignature: signature,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Unable to verify the payment."
+        );
+      }
+
+      setPaymentSuccess(
+        data?.message ||
+          "Payment verified and RugReflex Pro activated."
+      );
+      setTransactionSignature("");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to verify the payment."
+      );
+    } finally {
+      setVerifyLoading(false);
+    }
+  }
+
   return (
+    <>
     <main className="min-h-screen bg-[#100308] text-white">
       <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
         <nav className="mb-12 flex items-center justify-between border-b border-white/[0.07] pb-5">
@@ -163,7 +238,7 @@ export default function ProPage() {
           {error && (
             <div className="mx-auto mt-12 max-w-3xl rounded-2xl border border-red-500/20 bg-red-500/5 p-6 text-center">
               <p className="font-semibold text-red-300">
-                Unable to load Pro configuration
+                Pro payment issue
               </p>
               <p className="mt-2 text-xs text-white/40">{error}</p>
             </div>
@@ -344,52 +419,69 @@ export default function ProPage() {
                       </div>
                     </div>
 
-                    <p className="mt-5 text-xs leading-5 text-white/40">
-                      Payment transaction sending will be connected next.
-                      Keep this payment reference for verification.
-                    </p>
+                    <div className="mt-6 rounded-2xl border border-white/[0.08] bg-black/20 p-5">
+                      <p className="text-xs font-bold text-white/70">
+                        Complete your Solana payment
+                      </p>
+
+                      <ol className="mt-3 space-y-2 text-xs leading-5 text-white/45">
+                        <li>
+                          <span className="font-bold text-white/65">1.</span>{" "}
+                          Send exactly{" "}
+                          <span className="font-semibold text-white/75">
+                            {formatPrice(payment.amount)} {payment.currency}
+                          </span>{" "}
+                          to the receiving wallet above.
+                        </li>
+                        <li>
+                          <span className="font-bold text-white/65">2.</span>{" "}
+                          Wait for the Solana transaction to confirm.
+                        </li>
+                        <li>
+                          <span className="font-bold text-white/65">3.</span>{" "}
+                          Paste the transaction signature below and verify it.
+                        </li>
+                      </ol>
+
+                      <label className="mt-5 block">
+                        <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.15em] text-white/35">
+                          Solana transaction signature
+                        </span>
+                        <input
+                          type="text"
+                          value={transactionSignature}
+                          onChange={(e) =>
+                            setTransactionSignature(e.target.value)
+                          }
+                          placeholder="Paste transaction signature"
+                          className="w-full rounded-xl border border-zinc-700 bg-black px-3 py-3 font-mono text-xs text-white outline-none focus:border-red-600"
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        disabled={
+                          verifyLoading ||
+                          !transactionSignature.trim()
+                        }
+                        onClick={verifyPayment}
+                        className="mt-4 w-full rounded-xl bg-[#9f2348] px-4 py-3 text-xs font-bold text-white transition hover:bg-[#b52a54] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {verifyLoading
+                          ? "Verifying payment..."
+                          : "Verify Payment & Activate Pro"}
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                {payment && (
-                  <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-[#9f2348]/30 bg-[#9f2348]/5 p-6">
-                    <p className="text-sm font-bold">Payment created</p>
-                    <p className="mt-2 text-xs text-white/45">
-                      {payment.planName} · {payment.durationDays} days
+                {paymentSuccess && (
+                  <div className="mx-auto mt-6 max-w-4xl rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                    <p className="font-bold text-emerald-300">
+                      Pro activated
                     </p>
-
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-white/30">
-                          Amount
-                        </p>
-                        <p className="mt-1 font-bold">
-                          {formatPrice(payment.amount)} {payment.currency}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-white/30">
-                          Reference
-                        </p>
-                        <p className="mt-1 break-all font-mono text-xs text-white/70">
-                          {payment.reference}
-                        </p>
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <p className="text-[10px] uppercase tracking-wider text-white/30">
-                          Solana receiving wallet
-                        </p>
-                        <p className="mt-1 break-all font-mono text-xs text-white/70">
-                          {payment.receivingWallet}
-                        </p>
-                      </div>
-                    </div>
-
-                    <p className="mt-5 text-xs leading-5 text-white/40">
-                      Payment transaction sending will be connected next.
-                      Keep this payment reference for verification.
+                    <p className="mt-2 text-xs leading-5 text-white/50">
+                      {paymentSuccess}
                     </p>
                   </div>
                 )}
@@ -455,5 +547,12 @@ export default function ProPage() {
         </section>
       </div>
     </main>
+
+      <AuthGateModal
+        open={authGateOpen}
+        onClose={() => setAuthGateOpen(false)}
+        feature="RugReflex Pro"
+      />
+    </>
   );
 }

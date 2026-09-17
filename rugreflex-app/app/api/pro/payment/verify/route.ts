@@ -68,9 +68,17 @@ async function getTransaction(signature: string) {
   const json = await response.json();
 
   if (json.error) {
-    throw new Error(
-      json.error.message || "Unable to retrieve Solana transaction."
-    );
+    const message =
+      json.error.message || "Unable to retrieve Solana transaction.";
+
+    if (
+      message.toLowerCase().includes("invalid param") ||
+      message.toLowerCase().includes("invalid")
+    ) {
+      return null;
+    }
+
+    throw new Error(message);
   }
 
   return json.result;
