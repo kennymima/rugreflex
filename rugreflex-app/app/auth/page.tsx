@@ -52,7 +52,7 @@ export default function AuthPage() {
   const supabase = createClient();
 
   const [mode, setMode] =
-    useState<"login" | "signup">("login");
+    useState<"login" | "signup" | "forgot">("login");
 
   const [email, setEmail] =
     useState("");
@@ -191,6 +191,29 @@ export default function AuthPage() {
     setMessage("");
     setError("");
 
+    if (mode === "forgot") {
+      const { error } =
+        await supabase.auth.resetPasswordForEmail(
+          email,
+          {
+            redirectTo:
+              `${window.location.origin}/auth/reset-password`,
+          }
+        );
+
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setMessage(
+        "If an account exists for that email, a password reset link has been sent. Please check your inbox."
+      );
+      setLoading(false);
+      return;
+    }
+
     if (mode === "signup") {
       const redirectUrl =
         `${window.location.origin}/auth/callback`;
@@ -258,6 +281,14 @@ export default function AuthPage() {
     router.refresh();
   }
 
+  function switchMode(
+    nextMode: "login" | "signup" | "forgot"
+  ) {
+    setMode(nextMode);
+    setMessage("");
+    setError("");
+  }
+
   return (
     <main className="min-h-screen bg-[#16070d] px-6 py-12 text-white">
       <div className="mx-auto flex min-h-[80vh] max-w-md items-center justify-center">
@@ -268,45 +299,49 @@ export default function AuthPage() {
             </div>
 
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-200/60">
-              Token Risk Intelligence
+              {mode === "forgot"
+                ? "Reset Your Password"
+                : "Token Risk Intelligence"}
             </p>
           </div>
 
-          <div className="mb-6 flex rounded-xl border border-red-500/20 bg-black/20 p-1">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("login");
-                setMessage("");
-                setError("");
-              }}
-              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                mode === "login"
-                  ? "bg-red-700 text-white"
-                  : "text-red-200/60 hover:text-white"
-              }`}
-            >
-              Sign In
-            </button>
+          {mode !== "forgot" && (
+            <div className="mb-6 flex rounded-xl border border-red-500/20 bg-black/20 p-1">
+              <button
+                type="button"
+                onClick={() => switchMode("login")}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  mode === "login"
+                    ? "bg-red-700 text-white"
+                    : "text-red-200/60 hover:text-white"
+                }`}
+              >
+                Sign In
+              </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setMode("signup");
-                setMessage("");
-                setError("");
-              }}
-              className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                mode === "signup"
-                  ? "bg-red-700 text-white"
-                  : "text-red-200/60 hover:text-white"
-              }`}
-            >
-              Create Account
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => switchMode("signup")}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  mode === "signup"
+                    ? "bg-red-700 text-white"
+                    : "text-red-200/60 hover:text-white"
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
 
-          {referralCode && (
+          {mode === "forgot" && (
+            <div className="mb-6 text-center">
+              <p className="text-sm leading-6 text-red-100/70">
+                Enter your email address and we will send you a secure password reset link.
+              </p>
+            </div>
+          )}
+
+          {referralCode && mode !== "forgot" && (
             <div className="mb-5 rounded-xl border border-red-400/20 bg-red-950/30 px-4 py-3 text-center text-xs text-red-200">
               Referral code detected:
               <span className="ml-1 font-bold text-white">
@@ -337,28 +372,30 @@ export default function AuthPage() {
               />
             </div>
 
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-red-200/70">
-                Password
-              </label>
+            {mode !== "forgot" && (
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-red-200/70">
+                  Password
+                </label>
 
-              <input
-                type="password"
-                value={password}
-                onChange={(event) =>
-                  setPassword(event.target.value)
-                }
-                required
-                minLength={6}
-                autoComplete={
-                  mode === "signup"
-                    ? "new-password"
-                    : "current-password"
-                }
-                className="w-full rounded-xl border border-red-500/20 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-red-100/30 focus:border-red-400/50"
-                placeholder="••••••••"
-              />
-            </div>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
+                  required
+                  minLength={6}
+                  autoComplete={
+                    mode === "signup"
+                      ? "new-password"
+                      : "current-password"
+                  }
+                  className="w-full rounded-xl border border-red-500/20 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-red-100/30 focus:border-red-400/50"
+                  placeholder="••••••••"
+                />
+              </div>
+            )}
 
             {error && (
               <div className="rounded-xl border border-red-500/30 bg-red-950/40 px-4 py-3 text-sm text-red-300">
@@ -379,11 +416,33 @@ export default function AuthPage() {
             >
               {loading
                 ? "PLEASE WAIT..."
-                : mode === "signup"
-                  ? "CREATE ACCOUNT"
-                  : "SIGN IN"}
+                : mode === "forgot"
+                  ? "SEND RESET LINK"
+                  : mode === "signup"
+                    ? "CREATE ACCOUNT"
+                    : "SIGN IN"}
             </button>
           </form>
+
+          {mode === "login" && (
+            <button
+              type="button"
+              onClick={() => switchMode("forgot")}
+              className="mt-4 w-full text-center text-sm font-semibold text-red-300 hover:text-red-200"
+            >
+              Forgot password?
+            </button>
+          )}
+
+          {mode === "forgot" && (
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className="mt-4 w-full text-center text-sm font-semibold text-red-300 hover:text-red-200"
+            >
+              Back to Sign In
+            </button>
+          )}
 
           <p className="mt-6 text-center text-xs leading-5 text-red-100/40">
             RugReflex provides observed blockchain
