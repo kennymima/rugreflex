@@ -25,6 +25,7 @@ type PaymentConfig = {
   enabled: boolean;
   network: string;
   receiving_wallet: string | null;
+  token_mint: string | null;
 };
 
 type AdPackage = {
@@ -74,6 +75,48 @@ export default function AdminPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig[]>([]);
   const [adPackages, setAdPackages] = useState<AdPackage[]>([]);
+  const [advertisements, setAdvertisements] = useState<any[]>([]);
+  const [advertisementsLoading, setAdvertisementsLoading] = useState(false);
+  const [advertisementAction, setAdvertisementAction] = useState<number | null>(
+    null
+  );
+
+  async function loadAdvertisements() {
+    setAdvertisementsLoading(true);
+
+    try {
+      const response = await fetch("/api/admin/advertisements");
+      const data = await response.json();
+
+      if (response.ok) {
+        setAdvertisements(data.advertisements || []);
+      }
+    } finally {
+      setAdvertisementsLoading(false);
+    }
+  }
+
+  async function updateAdvertisement(id: number, status: "approved" | "rejected") {
+    setAdvertisementAction(id);
+
+    try {
+      const response = await fetch("/api/admin/advertisements", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, status }),
+      });
+
+      if (response.ok) {
+        await loadAdvertisements();
+      }
+    } finally {
+      setAdvertisementAction(null);
+    }
+  }
+
+
   const [overview, setOverview] = useState<Overview | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +139,7 @@ export default function AdminPage() {
       setPlans(data.plans || []);
       setPaymentConfig(data.paymentConfig || []);
       setAdPackages(data.adPackages || []);
+      await loadAdvertisements();
 
       const usersResponse = await fetch("/api/admin/users", {
         cache: "no-store",
@@ -255,7 +299,7 @@ export default function AdminPage() {
 
   async function updatePaymentConfig(
     currency: string,
-    field: "enabled" | "receiving_wallet",
+    field: "enabled" | "receiving_wallet" | "token_mint",
     value: boolean | string
   ) {
     setSaving(`payment-${currency}-${field}`);
@@ -547,6 +591,109 @@ export default function AdminPage() {
         </section>
 
         <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
+          <h2 className="text-lg font-semibold">Advertising Requests</h2>
+          <p className="mt-1 text-sm text-zinc-500">
+            Review submitted token promotions. Approval is required before payment and activation.
+          </p>
+
+          <div className="mt-5 space-y-4">
+            {advertisementsLoading ? (
+              <p className="text-sm text-zinc-500">
+                Loading advertising requests...
+              </p>
+            ) : advertisements.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                No advertising requests yet.
+              </p>
+            ) : (
+              advertisements.map((ad) => (
+                <div
+                  key={ad.id}
+                  className="rounded-xl border border-zinc-800 p-4"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-3">
+                        {ad.logo ? (
+                          <img
+                            src={ad.logo}
+                            alt={ad.token_name}
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : null}
+
+                        <div>
+                          <p className="font-semibold">
+                            {ad.token_name}
+                            {ad.token_symbol
+                              ? ` ($${ad.token_symbol})`
+                              : ""}
+                          </p>
+                          <p className="text-xs text-zinc-500">
+                            Status: {ad.status}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 break-all text-xs text-zinc-500">
+                        CA: {ad.token_address || "Not provided"}
+                      </p>
+
+                      {ad.description ? (
+                        <p className="mt-2 text-sm text-zinc-400">
+                          {ad.description}
+                        </p>
+                      ) : null}
+
+                      {ad.ad_packages ? (
+                        <p className="mt-2 text-xs text-zinc-500">
+                          Package: {ad.ad_packages.name} ·{" "}
+                          {ad.ad_packages.duration_days} day
+                          {ad.ad_packages.duration_days === 1 ? "" : "s"} ·{" "}
+                          {ad.ad_packages.price_usdc} USDC
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {ad.status === "pending_review" ? (
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          disabled={advertisementAction === ad.id}
+                          onClick={() =>
+                            updateAdvertisement(ad.id, "approved")
+                          }
+                          className="rounded-lg bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 disabled:opacity-50"
+                        >
+                          {advertisementAction === ad.id
+                            ? "Updating..."
+                            : "Approve"}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={advertisementAction === ad.id}
+                          onClick={() =>
+                            updateAdvertisement(ad.id, "rejected")
+                          }
+                          className="rounded-lg bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="shrink-0 rounded-lg border border-zinc-800 px-3 py-2 text-xs font-bold uppercase text-zinc-500">
+                        {ad.status}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
           <h2 className="text-lg font-semibold">Payment Configuration</h2>
           <p className="mt-1 text-sm text-zinc-500">
             Configure the Solana receiving wallets used for verified payments.
@@ -605,9 +752,27 @@ export default function AdminPage() {
                   />
                 </label>
 
+                <label className="mt-5 block">
+                  <span className="mb-2 block text-xs text-zinc-500">
+                    SPL Token Mint
+                  </span>
+                  <input
+                    type="text"
+                    defaultValue={payment.token_mint || ""}
+                    placeholder="Paste Solana token mint address"
+                    onBlur={(e) =>
+                      updatePaymentConfig(
+                        payment.currency,
+                        "token_mint",
+                        e.target.value.trim()
+                      )
+                    }
+                    className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-3 text-sm outline-none focus:border-red-600"
+                  />
+                </label>
+
                 <p className="mt-2 text-xs text-zinc-600">
-                  This address will be used by the payment system for
-                  transaction verification.
+                  The SPL mint used to verify this payment token on Solana.
                 </p>
               </div>
             ))}

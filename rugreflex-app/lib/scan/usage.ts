@@ -1,4 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/server";
+import {
+  createAdminClient,
+  createClient,
+} from "@/lib/supabase/server";
 
 export type ScanUserType =
   | "anonymous"
@@ -13,7 +16,7 @@ export type ScanUsageResult = {
   remaining: number;
 };
 
-const ANONYMOUS_LIMIT = 30;
+const ANONYMOUS_LIMIT = 3;
 const REGISTERED_LIMIT = 5;
 const PRO_LIMIT = 50;
 
@@ -180,13 +183,16 @@ async function consumeReferralBonusScan(
 export async function checkAndConsumeScan(
   visitorId: string | null
 ): Promise<ScanUsageResult> {
-  const supabase =
-    await createAdminClient();
+  const authClient =
+    await createClient();
 
   const {
     data: { user },
   } =
-    await supabase.auth.getUser();
+    await authClient.auth.getUser();
+
+  const supabase =
+    await createAdminClient();
 
   let userType: ScanUserType =
     "anonymous";
@@ -195,8 +201,27 @@ export async function checkAndConsumeScan(
     ANONYMOUS_LIMIT;
 
   if (user) {
-    userType = "registered";
-    limit = REGISTERED_LIMIT;
+    const { data: subscription } =
+      await supabase
+        .from("pro_subscriptions")
+        .select("status, expires_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    const isPro =
+      subscription?.status === "active" &&
+      Boolean(subscription.expires_at) &&
+      new Date(subscription.expires_at).getTime() > Date.now();
+
+    if (isPro) {
+      userType = "pro";
+      limit = PRO_LIMIT;
+    } else {
+      userType = "registered";
+      limit = REGISTERED_LIMIT;
+    }
   }
 
   if (!user && !visitorId) {

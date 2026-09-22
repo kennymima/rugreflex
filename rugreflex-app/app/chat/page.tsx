@@ -171,7 +171,7 @@ function ChatPageContent() {
     <main className="min-h-screen bg-[#100308] text-white">
       <RugReflexNav />
 
-      <section className="mx-auto flex min-h-[calc(100vh-72px)] max-w-5xl flex-col px-5 py-8 sm:px-6 lg:py-12">
+      <section className="mx-auto flex h-[calc(100vh-72px)] max-w-5xl flex-col overflow-hidden px-5 py-6 sm:px-6 sm:py-8 lg:py-10">
         <div className="mb-8">
           <div className="mb-3 flex items-center gap-2">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />

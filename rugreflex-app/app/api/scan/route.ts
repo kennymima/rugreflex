@@ -3,6 +3,9 @@ import {
   getAsset,
 } from "@/lib/helius";
 import {
+  getHolderData,
+} from "@/lib/holders";
+import {
   getDexScreenerData,
 } from "@/lib/dexscreener";
 import {
@@ -51,10 +54,11 @@ export async function GET(
      * =====================================================
      */
 
-    const [asset, market] =
+    const [asset, market, holders] =
       await Promise.all([
         getAsset(mint),
         getDexScreenerData(mint),
+        getHolderData(mint),
       ]);
 
     if (!asset) {
@@ -269,6 +273,33 @@ export async function GET(
      * =====================================================
      */
 
+    let deployer = null;
+
+    try {
+      const deployerUrl = new URL(
+        `/api/deployer?mint=${encodeURIComponent(mint)}`,
+        request.url
+      );
+
+      const deployerResponse = await fetch(
+        deployerUrl,
+        { cache: "no-store" }
+      );
+
+      if (deployerResponse.ok) {
+        const deployerPayload =
+          await deployerResponse.json();
+
+        deployer =
+          deployerPayload?.deployer ?? null;
+      }
+    } catch (deployerError) {
+      console.warn(
+        "Deployer intelligence unavailable during scan:",
+        deployerError
+      );
+    }
+
     const response =
       NextResponse.json({
         success: true,
@@ -300,6 +331,10 @@ export async function GET(
         market: marketData,
 
         security,
+
+        holders,
+
+        deployer,
 
           timestamp:
             new Date().toISOString(),

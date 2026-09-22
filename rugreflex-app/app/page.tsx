@@ -1,4 +1,5 @@
 import Link from "next/link";
+import PromotionContact from "./components/PromotionContact";
 import RugReflexNav from "@/app/components/RugReflexNav";
 
 export default function Home() {
@@ -155,6 +156,11 @@ export default function Home() {
           </div>
         </section>
       </section>
+
+
+      <div className="mx-auto mt-16 max-w-7xl px-5 sm:px-6">
+        <PromotionContact />
+      </div>
 
       <footer className="border-t border-white/[0.07]">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-8 sm:px-6 sm:flex-row sm:items-center sm:justify-between">

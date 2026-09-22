@@ -40,10 +40,18 @@ type RadarToken = {
   pairCreatedAt?: number | null;
   radarEligible?: boolean;
   qualifiedAlpha?: boolean;
+  alphaStage?: "EARLY_ALPHA" | "EMERGING_ALPHA" | "QUALIFIED_ALPHA" | null;
   qualificationReasons?: string[];
 };
 
-type Filter = "ALL" | "ACTIVE" | "EARLY" | "WATCHLIST" | "QUALIFIED";
+type Filter =
+  | "ALL"
+  | "ACTIVE"
+  | "EARLY"
+  | "WATCHLIST"
+  | "EARLY_ALPHA"
+  | "EMERGING_ALPHA"
+  | "QUALIFIED_ALPHA";
 
 function formatUsd(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -126,8 +134,12 @@ function filterToken(token: RadarToken, filter: Filter) {
       return score >= 40 && score <= 59;
     case "ACTIVE":
       return score >= 60 && score <= 79;
-    case "QUALIFIED":
-      return score >= 80 && token.qualifiedAlpha === true;
+    case "EARLY_ALPHA":
+      return token.alphaStage === "EARLY_ALPHA";
+    case "EMERGING_ALPHA":
+      return token.alphaStage === "EMERGING_ALPHA";
+    case "QUALIFIED_ALPHA":
+      return token.alphaStage === "QUALIFIED_ALPHA";
     default:
       return true;
   }
@@ -138,8 +150,9 @@ export default function RadarPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [filter, setFilter] = useState<Filter>("QUALIFIED");
+  const [filter, setFilter] = useState<Filter>("QUALIFIED_ALPHA");
   const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
@@ -156,8 +169,11 @@ export default function RadarPage() {
         const data = await response.json();
 
         if (!response.ok) {
+          setErrorStatus(response.status);
           throw new Error(data?.error || "Unable to load Alpha Radar.");
         }
+
+        setErrorStatus(null);
 
         if (cancelled) return;
 
@@ -229,7 +245,7 @@ export default function RadarPage() {
     tokens.find((token) => token.tokenAddress === selected) || null;
 
   const qualifiedCount = tokens.filter(
-    (token) => Number(token.alphaScore || 0) >= 80 && token.qualifiedAlpha === true
+    (token) => Number(token.alphaScore || 0) >= 70 && token.qualifiedAlpha === true
   ).length;
 
   return (
@@ -335,7 +351,9 @@ export default function RadarPage() {
                       ["ACTIVE", "Active"],
                       ["EARLY", "Early"],
                       ["WATCHLIST", "Watchlist"],
-                      ["QUALIFIED", "Qualified Alpha"],
+                      ["EARLY_ALPHA", "Early Alpha"],
+                      ["EMERGING_ALPHA", "Emerging Alpha"],
+                      ["QUALIFIED_ALPHA", "Qualified Alpha"],
                     ] as [Filter, string][]
                   ).map(([value, label]) => (
                     <button
@@ -367,14 +385,35 @@ export default function RadarPage() {
 
             {!loading && error && (
               <div className="p-8">
-                <div className="rounded-2xl border border-red-400/15 bg-red-500/[0.05] p-7">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-red-300">
-                    Radar unavailable
-                  </p>
-                  <p className="mt-2 text-sm font-bold text-white/60">
-                    {error}
-                  </p>
-                </div>
+                {errorStatus === 401 || errorStatus === 403 ? (
+                  <div className="rounded-2xl border border-[#9b2348]/30 bg-[#9b2348]/[0.07] p-8 text-center">
+                    <p className="text-xs font-black uppercase tracking-[0.22em] text-[#e05a7d]">
+                      Pro Access Required
+                    </p>
+                    <h3 className="mt-3 text-2xl font-black text-white">
+                      Alpha Radar is a Pro intelligence feature.
+                    </h3>
+                    <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/45">
+                      Active Pro subscribers get access to Radar candidates,
+                      Alpha Scores, investigations, filters, and Qualified Alpha intelligence.
+                    </p>
+                    <Link
+                      href="/pro"
+                      className="mt-6 inline-flex rounded-xl bg-[#9b2348] px-6 py-3 text-xs font-black uppercase tracking-[0.16em] text-white transition hover:bg-[#b52b55]"
+                    >
+                      View Pro Access
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-red-400/15 bg-red-500/[0.05] p-7">
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-red-300">
+                      Radar unavailable
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-white/60">
+                      {error}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

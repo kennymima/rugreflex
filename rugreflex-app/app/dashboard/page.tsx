@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import RugReflexNav from "@/app/components/RugReflexNav";
 
 type HistoryRecord = {
   id: string;
@@ -313,7 +314,9 @@ export default function DashboardPage() {
   }, [statistics]);
 
   return (
-    <main className="min-h-screen bg-[#100307] text-white">
+    <>
+      <RugReflexNav />
+      <main className="min-h-screen bg-[#100307] text-white">
       <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-10">
 
         {/* HEADER */}
@@ -928,6 +931,7 @@ export default function DashboardPage() {
           </p>
         </footer>
       </div>
-    </main>
+      </main>
+    </>
   );
 }

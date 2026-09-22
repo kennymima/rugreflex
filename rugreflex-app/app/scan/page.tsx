@@ -284,6 +284,34 @@ function Home() {
       );
 
       if (!scanResponse.ok || !scanResult.success) {
+        if (scanResponse.status === 429) {
+          if (scanResult.scanLimit) {
+            setScanLimit(scanResult.scanLimit);
+          }
+
+          if (
+            scanResult.scanLimit?.userType ===
+            "anonymous"
+          ) {
+            throw new Error(
+              "You have used your 3 free scans for today. Sign up for a free account to continue with 5 scans per day."
+            );
+          }
+
+          if (
+            scanResult.scanLimit?.userType ===
+            "registered"
+          ) {
+            throw new Error(
+              "You have used your 5 daily scans. Upgrade to RugReflex Pro for 50 scans per day and full features."
+            );
+          }
+
+          throw new Error(
+            "You have reached your daily scan limit."
+          );
+        }
+
         throw new Error(
           scanResult.error ||
             "Unable to scan this token."
@@ -345,42 +373,6 @@ function Home() {
           scan.market.liquidityUsd !== null &&
           scan.market.liquidityUsd !== undefined;
 
-        let liquidityIntelligence = null;
-
-        try {
-          const liquidityResponse = await fetch(
-            `/api/liquidity?address=${encodeURIComponent(
-              tokenAddress
-            )}`
-          );
-
-          const liquidityResult =
-            await liquidityResponse.json();
-
-          console.log(
-            "LIQUIDITY INTELLIGENCE API RESULT:",
-            liquidityResult
-          );
-
-          if (
-            liquidityResponse.ok &&
-            liquidityResult.success
-          ) {
-            liquidityIntelligence =
-              liquidityResult.intelligence ?? null;
-          } else {
-            console.warn(
-              "Liquidity intelligence unavailable:",
-              liquidityResult.error
-            );
-          }
-        } catch (liquidityError) {
-          console.warn(
-            "Liquidity intelligence request failed:",
-            liquidityError
-          );
-        }
-
         setLiquidityData({
           status: hasLiquidity
             ? "AVAILABLE"
@@ -422,7 +414,7 @@ function Home() {
             scan.market.pairUrl ?? null,
 
           intelligence:
-            liquidityIntelligence,
+            scan.liquidity?.intelligence ?? null,
         });
       }
 
@@ -430,35 +422,13 @@ function Home() {
          5. HOLDER ANALYSIS
          =================================================== */
 
-      const holdersResponse = await fetch(
-        `/api/holders?address=${encodeURIComponent(
-          tokenAddress
-        )}`
-      );
-
-      const holdersResult =
-        await holdersResponse.json();
-
-      console.log(
-        "HOLDERS API RESULT:",
-        holdersResult
-      );
-
-      if (
-        holdersResponse.ok &&
-        holdersResult.success
-      ) {
-        setHolderData(holdersResult);
+      if (scan.holders) {
+        setHolderData(scan.holders);
 
         await saveScanHistory(
           tokenAddress,
           scan,
-          holdersResult
-        );
-      } else {
-        console.warn(
-          "Holder analysis unavailable:",
-          holdersResult.error
+          scan.holders
         );
       }
 
@@ -466,42 +436,8 @@ function Home() {
          6. DEPLOYER INTELLIGENCE
          =================================================== */
 
-      try {
-        const deployerResponse = await fetch(
-          `/api/deployer?mint=${encodeURIComponent(
-            tokenAddress
-          )}`
-        );
-
-        const deployerResult =
-          await deployerResponse.json();
-
-        console.log(
-          "DEPLOYER API RESULT:",
-          deployerResult
-        );
-
-        if (
-          !deployerResponse.ok ||
-          !deployerResult.success
-        ) {
-          console.warn(
-            "Deployer analysis unavailable:",
-            deployerResult.error
-          );
-        } else if (deployerResult.deployer) {
-          setDeployerData(deployerResult.deployer);
-        }
-      } catch (deployerError) {
-        /*
-         * Deployer intelligence is an additional
-         * intelligence layer. If it fails, the
-         * core token scanner must continue working.
-         */
-        console.warn(
-          "Deployer analysis failed:",
-          deployerError
-        );
+      if (scan.deployer) {
+        setDeployerData(scan.deployer);
       }
 
     } catch (err) {
@@ -3121,7 +3057,7 @@ function Home() {
             )}
 
             {/* =============================================
-                COMING SOON
+                RUGREFLEX INTELLIGENCE
                 ============================================= */}
 
             <section className="mt-14">
@@ -3129,16 +3065,16 @@ function Home() {
               <div className="mb-6">
 
                 <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/30">
-                  Coming to RugReflex
+                  RugReflex Intelligence
                 </p>
 
                 <h2 className="mt-2 text-3xl font-black tracking-tight">
-                  Intelligence Expansion
+                  Built Intelligence
                 </h2>
 
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-white/25">
-                  RugReflex is being built into a broader
-                  token and wallet intelligence platform.
+                  RugReflex combines token risk analysis with
+                  deployer, wallet, referral and premium intelligence.
                 </p>
 
               </div>
@@ -3147,10 +3083,13 @@ function Home() {
 
                 {/* DEPLOYER */}
 
-                <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6">
+                <a
+                  href="/scan"
+                  className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6 transition hover:border-red-400/20"
+                >
 
-                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/25">
-                    Planned
+                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/40">
+                    Available
                   </span>
 
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-sm">
@@ -3162,18 +3101,21 @@ function Home() {
                   </h3>
 
                   <p className="mt-2 text-xs leading-5 text-white/25">
-                    Analyze deployer wallets, funding paths,
-                    wallet history and related token activity.
+                    Analyze the wallet associated with token creation
+                    and its recent blockchain activity.
                   </p>
 
-                </div>
+                </a>
 
-                {/* AI */}
+                {/* AI RISK */}
 
-                <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6">
+                <a
+                  href="/scan"
+                  className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6 transition hover:border-red-400/20"
+                >
 
-                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/25">
-                    Planned
+                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/40">
+                    Available
                   </span>
 
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-sm">
@@ -3185,18 +3127,21 @@ function Home() {
                   </h3>
 
                   <p className="mt-2 text-xs leading-5 text-white/25">
-                    Turn raw blockchain signals into clear,
-                    explainable risk intelligence.
+                    Turn blockchain and market signals into
+                    clear, explainable risk intelligence.
                   </p>
 
-                </div>
+                </a>
 
                 {/* WALLET */}
 
-                <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6">
+                <a
+                  href="/wallet"
+                  className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-[#1b050b]/65 p-6 transition hover:border-red-400/20"
+                >
 
-                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/25">
-                    Planned
+                  <span className="absolute right-5 top-5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white/40">
+                    Available
                   </span>
 
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-sm">
@@ -3208,11 +3153,11 @@ function Home() {
                   </h3>
 
                   <p className="mt-2 text-xs leading-5 text-white/25">
-                    Monitor suspicious wallets and discover
-                    relationships across token ecosystems.
+                    Explore wallet intelligence and relationships
+                    across token ecosystems.
                   </p>
 
-                </div>
+                </a>
 
               </div>
 
@@ -3237,14 +3182,16 @@ function Home() {
                 </h2>
 
                 <p className="mt-3 max-w-lg text-xs leading-6 text-white/30">
-                  A future referral system will allow users
-                  to invite others and earn rewards within
-                  the RugReflex ecosystem.
+                  Invite other users and earn rewards through
+                  the RugReflex referral program.
                 </p>
 
-                <div className="mt-6 inline-flex rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white/30">
-                  Coming Soon
-                </div>
+                <a
+                  href="/referrals"
+                  className="mt-6 inline-flex rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white/40 transition hover:border-red-400/20 hover:text-red-300"
+                >
+                  Open Referrals →
+                </a>
 
               </div>
 
@@ -3261,14 +3208,16 @@ function Home() {
                 </h2>
 
                 <p className="mt-3 max-w-lg text-xs leading-6 text-white/30">
-                  Future premium plans can unlock advanced
-                  scans, deeper wallet intelligence, monitoring,
-                  reports and professional tools.
+                  Unlock higher scan limits, advanced intelligence,
+                  deeper reports and professional RugReflex tools.
                 </p>
 
-                <div className="mt-6 inline-flex rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white/30">
-                  Coming Soon
-                </div>
+                <a
+                  href="/pro"
+                  className="mt-6 inline-flex rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-white/40 transition hover:border-red-400/20 hover:text-red-300"
+                >
+                  Explore Pro →
+                </a>
 
               </div>
 

@@ -158,6 +158,9 @@ export async function PATCH(request: Request) {
     if ("receiving_wallet" in config) {
       paymentUpdates.receiving_wallet = config.receiving_wallet;
     }
+    if ("token_mint" in config) {
+      paymentUpdates.token_mint = config.token_mint;
+    }
 
     paymentUpdates.updated_at = new Date().toISOString();
 

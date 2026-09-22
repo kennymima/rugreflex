@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
     "@pump-fun/pump-sdk": "^1.36.0",
     "@solana/spl-token": "^0.4.15",
     "@solana/web3.js": "^1.98.4",

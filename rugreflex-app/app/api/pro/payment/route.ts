@@ -287,8 +287,16 @@ export async function POST(request: Request) {
       .single();
 
     if (paymentError || !payment) {
+      console.error("Pro payment record insert failed:", paymentError);
+
       return NextResponse.json(
-        { error: "Unable to create the Pro payment record." },
+        {
+          error: "Unable to create the Pro payment record.",
+          details: paymentError?.message || "No payment record was returned.",
+          code: paymentError?.code || null,
+          hint: paymentError?.hint || null,
+          detailsFromSupabase: paymentError?.details || null,
+        },
         { status: 500 }
       );
     }
